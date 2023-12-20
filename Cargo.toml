@@ -1,0 +1,13 @@
+[package]
+name = "renderer"
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+lto = true
+opt-level = 3
+strip = true
+
+[dependencies]
+clap = "4.4.11"
+png = "0.17.10"
