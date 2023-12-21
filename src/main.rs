@@ -3,9 +3,9 @@ mod structures;
 
 use glam::{vec3, Vec3};
 use rand::{thread_rng, Rng};
-use structures::{Camera, Object, Ray, Sphere};
+use structures::{Camera, Object, Quad, Ray, Sphere};
 
-fn trace_ray(ray: Ray, objects: &[Box<dyn Object>]) -> Vec3 {
+fn ray_hit_color(ray: Ray, objects: &[Box<dyn Object>]) -> Vec3 {
     for object in objects {
         if let Some(hit) = object.intersect(&ray) {
             return hit.color;
@@ -15,7 +15,7 @@ fn trace_ray(ray: Ray, objects: &[Box<dyn Object>]) -> Vec3 {
     Vec3::splat(0.0)
 }
 
-fn make_image(camera: &mut Camera, objects: &[Box<dyn Object>]) {
+fn send_rays(camera: &mut Camera, objects: &[Box<dyn Object>]) {
     let film = &mut camera.film;
     let samples_per_pixel = 10;
 
@@ -32,7 +32,7 @@ fn make_image(camera: &mut Camera, objects: &[Box<dyn Object>]) {
                 film_pos += u * film.world_u + v * film.world_v;
 
                 let camera_ray = Ray::new(camera.world_origin, film_pos - camera.world_origin);
-                color += trace_ray(camera_ray, objects);
+                color += ray_hit_color(camera_ray, objects);
             }
 
             film.set_pixel(x, y, color / (samples_per_pixel as f32));
@@ -46,12 +46,19 @@ fn main() {
     let (input, output) = io::read_args().expect("Error reading arguments");
     let (width, height) = io::read_input(&input).expect("Error reading input file");
 
-    let sphere1 = Sphere::new(vec3(-1.0, 0.0, 4.0), 0.3, vec3(1.0, 0.0, 0.0));
-    let sphere2 = Sphere::new(vec3(1.0, 0.0, 4.0), 0.7, vec3(0.0, 1.0, 0.0));
-    let objects: Vec<Box<dyn Object>> = vec![Box::new(sphere1), Box::new(sphere2)];
+    let sphere1 = Sphere::new(vec3(-1.0, 0.2, 4.0), 0.4, vec3(1.0, 0.0, 0.0));
+    let sphere2 = Sphere::new(vec3(1.0, 0.4, 4.0), 0.8, vec3(0.0, 1.0, 0.0));
+    let quad = Quad::new(
+        Vec3::splat(0.0),
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 0.0, 1.0),
+    );
+    let objects: Vec<Box<dyn Object>> = vec![Box::new(sphere1), Box::new(sphere2), Box::new(quad)];
+    println!("Rendering scene with {} objects", objects.len());
 
     let mut camera = Camera::from_dimensions(width, height);
-    make_image(&mut camera, &objects);
+    send_rays(&mut camera, &objects);
 
     io::save_to_png(camera.film, &output).expect("Error writing to png file");
     println!("Saved {}x{} image to {}", width, height, output)

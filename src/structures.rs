@@ -26,9 +26,16 @@ pub struct Ray {
 }
 
 pub struct Sphere {
-    pub center: Vec3,
-    pub radius: f32,
-    pub color: Vec3,
+    center: Vec3,
+    radius: f32,
+    color: Vec3,
+}
+
+pub struct Quad {
+    corner: Vec3,
+    u: Vec3,
+    v: Vec3,
+    color: Vec3,
 }
 
 pub struct Hit {
@@ -122,10 +129,38 @@ impl Object for Sphere {
         let c = (ray.origin - self.center).dot(ray.origin - self.center) - self.radius.powi(2);
         let discriminant = b * b - 4.0 * c;
 
-        if discriminant >= FLOAT_ERROR {
+        if discriminant > FLOAT_ERROR {
             Some(Hit {
                 distance: 1.0,
                 normal: Vec3::splat(0.0),
+                color: self.color,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl Quad {
+    pub fn new(corner: Vec3, u: Vec3, v: Vec3, color: Vec3) -> Self {
+        Quad {
+            corner,
+            u: u.normalize(),
+            v: v.normalize(),
+            color,
+        }
+    }
+}
+
+impl Object for Quad {
+    fn intersect(&self, ray: &Ray) -> Option<Hit> {
+        let normal = self.u.cross(self.v).normalize();
+        let denominator = normal.dot(ray.direction);
+
+        if denominator > FLOAT_ERROR {
+            Some(Hit {
+                distance: (normal.dot(self.corner) - normal.dot(ray.origin)) / denominator,
+                normal,
                 color: self.color,
             })
         } else {
