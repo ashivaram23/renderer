@@ -9,5 +9,5 @@ opt-level = 3
 strip = true
 
 [dependencies]
-clap = "4.4.11"
+glam = "0.25.0"
 png = "0.17.10"
