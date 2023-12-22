@@ -1,8 +1,11 @@
 use glam::{vec3, Vec3};
 
 pub const FLOAT_ERROR: f32 = 0.001;
-pub const CLIP_NEAR: f32 = 0.01;
-pub const CLIP_FAR: f32 = 1000.0;
+
+pub struct RenderSettings {
+    // samples per pixel, near and far clip, sky color, etc
+    // with defaults if user doesnt give
+}
 
 pub struct Film {
     pub screen_width: u32,
@@ -91,17 +94,6 @@ impl Camera {
             },
         }
     }
-
-    pub fn from_dimensions(width: u32, height: u32) -> Self {
-        Camera::new(
-            width,
-            height,
-            Vec3::splat(0.0),
-            vec3(0.0, 0.0, 1.0),
-            vec3(0.0, 1.0, 0.0),
-            1.0,
-        )
-    }
 }
 
 impl Ray {
@@ -110,6 +102,10 @@ impl Ray {
             origin,
             direction: direction.normalize(),
         }
+    }
+
+    pub fn at(&self, distance: f32) -> Vec3 {
+        self.origin + distance * self.direction
     }
 }
 
@@ -129,10 +125,24 @@ impl Object for Sphere {
         let c = (ray.origin - self.center).dot(ray.origin - self.center) - self.radius.powi(2);
         let discriminant = b * b - 4.0 * c;
 
-        if discriminant > FLOAT_ERROR {
+        if discriminant < 0.0 {
+            return None;
+        }
+
+        let sqrt_discriminant = discriminant.sqrt();
+        let first_hit = (-b - sqrt_discriminant) / 2.0;
+        let second_hit = (-b + sqrt_discriminant) / 2.0;
+
+        if first_hit > FLOAT_ERROR {
             Some(Hit {
-                distance: 1.0,
-                normal: Vec3::splat(0.0),
+                distance: first_hit,
+                normal: (ray.at(first_hit) - self.center).normalize(),
+                color: self.color,
+            })
+        } else if second_hit > FLOAT_ERROR {
+            Some(Hit {
+                distance: second_hit,
+                normal: (ray.at(second_hit) - self.center).normalize(),
                 color: self.color,
             })
         } else {

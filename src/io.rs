@@ -44,13 +44,12 @@ struct QuadParams {
 
 #[derive(Debug)]
 pub struct SceneParseError {
-    element: String,
     message: String,
 }
 
 impl Display for SceneParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Error parsing {}: {}", self.element, self.message)
+        write!(f, "{}", self.message)
     }
 }
 
@@ -59,10 +58,24 @@ impl Error for SceneParseError {}
 type SceneResult = (Camera, Vec<Box<dyn Object>>);
 
 pub fn read_input(filename: &str) -> Result<SceneResult, Box<dyn Error>> {
-    let scene_json = fs::read_to_string(Path::new(filename))?;
-    let mut scene_params: SceneParams = from_str(&scene_json)?;
+    let Ok(scene_json) = fs::read_to_string(Path::new(filename)) else {
+        return Err(Box::new(SceneParseError {
+            message: format!("Couldn't open file at {}", filename),
+        }));
+    };
 
-    let camera_params: CameraParams = from_value(scene_params.camera)?;
+    let Ok(mut scene_params) = from_str::<SceneParams>(&scene_json) else {
+        return Err(Box::new(SceneParseError {
+            message: format!("{} isn't in valid JSON format", filename),
+        }));
+    };
+
+    let Ok(camera_params) = from_value::<CameraParams>(scene_params.camera) else {
+        return Err(Box::new(SceneParseError {
+            message: "Camera parameters aren't correctly formatted".to_string(),
+        }));
+    };
+
     let camera = Camera::new(
         camera_params.film_dimensions[0],
         camera_params.film_dimensions[1],
@@ -76,21 +89,24 @@ pub fn read_input(filename: &str) -> Result<SceneResult, Box<dyn Error>> {
     for (name, object) in scene_params.objects.iter_mut() {
         let Some(object_map) = object.as_object_mut() else {
             return Err(Box::new(SceneParseError {
-                element: name.to_string(),
-                message: "not a valid scene object".to_string(),
+                message: format!("{} isn't a valid scene object", name),
             }));
         };
 
         let Some((_, object_type)) = object_map.remove_entry("type") else {
             return Err(Box::new(SceneParseError {
-                element: name.to_string(),
-                message: "object doesn't have type".to_string(),
+                message: format!("Object {} doesn't have type field", name),
             }));
         };
 
         match object_type.as_str() {
             Some("sphere") => {
-                let sphere_params: SphereParams = from_value(object.clone())?;
+                let Ok(sphere_params) = from_value::<SphereParams>(object.clone()) else {
+                    return Err(Box::new(SceneParseError {
+                        message: format!("Sphere object {} has invalid parameters", name),
+                    }));
+                };
+
                 objects.push(Box::new(Sphere::new(
                     Vec3::from_array(sphere_params.center),
                     sphere_params.radius,
@@ -98,7 +114,12 @@ pub fn read_input(filename: &str) -> Result<SceneResult, Box<dyn Error>> {
                 )));
             }
             Some("quad") => {
-                let quad_params: QuadParams = from_value(object.clone())?;
+                let Ok(quad_params) = from_value::<QuadParams>(object.clone()) else {
+                    return Err(Box::new(SceneParseError {
+                        message: format!("Quad object {} has invalid parameters", name),
+                    }));
+                };
+
                 objects.push(Box::new(Quad::new(
                     Vec3::from_array(quad_params.corner),
                     Vec3::from_array(quad_params.u),
@@ -108,8 +129,7 @@ pub fn read_input(filename: &str) -> Result<SceneResult, Box<dyn Error>> {
             }
             _ => {
                 return Err(Box::new(SceneParseError {
-                    element: name.to_string(),
-                    message: "object type invalid".to_string(),
+                    message: format!("Object {} has invalid type", name),
                 }));
             }
         }

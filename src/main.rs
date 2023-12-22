@@ -1,18 +1,29 @@
 mod io;
 mod structures;
 
+use std::process::exit;
+
 use glam::Vec3;
 use rand::{thread_rng, Rng};
-use structures::{Camera, Object, Ray};
+use structures::{Camera, Hit, Object, Ray};
 
 fn ray_hit_color(ray: Ray, objects: &[Box<dyn Object>]) -> Vec3 {
+    let mut best_hit: Option<Hit> = None;
     for object in objects {
-        if let Some(hit) = object.intersect(&ray) {
-            return hit.color;
+        let Some(hit) = object.intersect(&ray) else {
+            continue;
+        };
+
+        if best_hit.is_none() || hit.distance < best_hit.as_ref().unwrap().distance {
+            best_hit = Some(hit)
         }
     }
 
-    Vec3::splat(0.0)
+    if let Some(hit) = best_hit {
+        hit.color
+    } else {
+        Vec3::splat(0.0)
+    }
 }
 
 fn send_rays(camera: &mut Camera, objects: &[Box<dyn Object>]) {
@@ -44,10 +55,16 @@ fn send_rays(camera: &mut Camera, objects: &[Box<dyn Object>]) {
 
 fn main() {
     let (input, output) = io::read_args().expect("Error reading arguments");
-    let (mut camera, objects) = io::read_input(&input).expect("Error reading input file");
+    let (mut camera, objects) = match io::read_input(&input) {
+        Ok((camera, objects)) => (camera, objects),
+        Err(error) => {
+            println!("Error reading scene file: {}", error);
+            exit(0);
+        }
+    };
 
     let (width, height) = (camera.film.screen_width, camera.film.screen_height);
-    println!("Rendering image with {} objects", objects.len());
+    println!("Rendering scene with {} objects", objects.len());
 
     send_rays(&mut camera, &objects);
 
