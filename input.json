@@ -1,0 +1,30 @@
+{
+    "camera": {
+        "film_dimensions": [1280, 720],
+        "origin": [0, 0, 0],
+        "look_at": [0, 0, 3],
+        "up": [0.2, 1, 0]
+    },
+
+    "objects": {
+        "sphere1": {
+            "type": "sphere",
+            "center": [-1, 0.2, 4],
+            "radius": 0.4,
+            "color": [1, 0, 0]
+        },
+        "sphere2": {
+            "type": "sphere",
+            "center": [1, 0.4, 4],
+            "radius": 0.8,
+            "color": [0, 1, 0]
+        },
+        "quad": {
+            "type": "quad",
+            "corner": [0, 0, 0],
+            "u": [1, 0, 0],
+            "v": [0, 0, 1],
+            "color": [0, 0, 1]
+        }
+    }
+}

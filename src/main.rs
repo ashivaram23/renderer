@@ -1,9 +1,9 @@
 mod io;
 mod structures;
 
-use glam::{vec3, Vec3};
+use glam::Vec3;
 use rand::{thread_rng, Rng};
-use structures::{Camera, Object, Quad, Ray, Sphere};
+use structures::{Camera, Object, Ray};
 
 fn ray_hit_color(ray: Ray, objects: &[Box<dyn Object>]) -> Vec3 {
     for object in objects {
@@ -44,20 +44,11 @@ fn send_rays(camera: &mut Camera, objects: &[Box<dyn Object>]) {
 
 fn main() {
     let (input, output) = io::read_args().expect("Error reading arguments");
-    let (width, height) = io::read_input(&input).expect("Error reading input file");
+    let (mut camera, objects) = io::read_input(&input).expect("Error reading input file");
 
-    let sphere1 = Sphere::new(vec3(-1.0, 0.2, 4.0), 0.4, vec3(1.0, 0.0, 0.0));
-    let sphere2 = Sphere::new(vec3(1.0, 0.4, 4.0), 0.8, vec3(0.0, 1.0, 0.0));
-    let quad = Quad::new(
-        Vec3::splat(0.0),
-        vec3(1.0, 0.0, 0.0),
-        vec3(0.0, 0.0, 1.0),
-        vec3(0.0, 0.0, 1.0),
-    );
-    let objects: Vec<Box<dyn Object>> = vec![Box::new(sphere1), Box::new(sphere2), Box::new(quad)];
-    println!("Rendering scene with {} objects", objects.len());
+    let (width, height) = (camera.film.screen_width, camera.film.screen_height);
+    println!("Rendering image with {} objects", objects.len());
 
-    let mut camera = Camera::from_dimensions(width, height);
     send_rays(&mut camera, &objects);
 
     io::save_to_png(camera.film, &output).expect("Error writing to png file");
