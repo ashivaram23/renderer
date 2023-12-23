@@ -9,7 +9,7 @@ use structures::{Hit, Object, Ray, Scene};
 
 fn random_direction(normal: Vec3) -> Vec3 {
     let sphere_vec = loop {
-        let point = Vec3::from_array(thread_rng().gen());
+        let point = Vec3::from_array(thread_rng().gen()) * 2.0 - 1.0;
         if point.length_squared() < 1.0 {
             break point.normalize();
         }
@@ -26,7 +26,7 @@ fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u3
     let mut light = Vec3::splat(1.0);
     let mut next_ray = ray;
 
-    for _ in 0..1 {
+    for _ in 0..depth {
         let mut best_hit: Option<Hit> = None;
         for object in objects {
             let Some(hit) = object.intersect(&next_ray) else {
@@ -39,7 +39,7 @@ fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u3
         }
 
         if let Some(hit) = best_hit {
-            light *= hit.normal * 0.5 + 0.5; // should be fraction from material's bsdf
+            light *= hit.color; // should be fraction from material's bsdf
             next_ray = Ray::new(next_ray.at(hit.distance), random_direction(hit.normal));
         } else {
             light *= environment;

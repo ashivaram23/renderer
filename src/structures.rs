@@ -8,8 +8,6 @@ pub trait Object {
 
 pub struct RenderSettings {
     pub samples_per_pixel: u32,
-    pub clip_near: f32,
-    pub clip_far: f32,
     pub max_ray_depth: u32,
 }
 
@@ -64,9 +62,7 @@ impl RenderSettings {
     pub fn default() -> Self {
         RenderSettings {
             samples_per_pixel: 16,
-            clip_near: 0.01,
-            clip_far: 1000.0,
-            max_ray_depth: 4,
+            max_ray_depth: 8,
         }
     }
 }
@@ -93,8 +89,10 @@ impl Camera {
         let world_height = world_width * (screen_height as f32) / (screen_width as f32);
 
         let world_forwards = (look_at - origin).normalize();
-        let world_up = up.normalize();
-        let world_u = -world_forwards.cross(world_up);
+        let world_left = world_forwards.cross(up).normalize();
+        let world_up = world_left.cross(world_forwards).normalize();
+
+        let world_u = world_up.cross(world_forwards);
         let world_v = world_up;
 
         let world_position = origin
@@ -188,17 +186,6 @@ impl Quad {
 
 impl Object for Quad {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        let normal = self.u.cross(self.v).normalize();
-        let denominator = normal.dot(ray.direction);
-
-        if denominator > FLOAT_ERROR {
-            Some(Hit {
-                distance: (normal.dot(self.corner) - normal.dot(ray.origin)) / denominator,
-                normal,
-                color: self.color,
-            })
-        } else {
-            None
-        }
+        todo!()
     }
 }
