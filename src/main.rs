@@ -7,27 +7,47 @@ use glam::Vec3;
 use rand::{thread_rng, Rng};
 use structures::{Hit, Object, Ray, Scene};
 
-fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3) -> Vec3 {
-    let mut best_hit: Option<Hit> = None;
-    for object in objects {
-        let Some(hit) = object.intersect(&ray) else {
-            continue;
-        };
+fn random_direction(normal: Vec3) -> Vec3 {
+    let sphere_vec = loop {
+        let point = Vec3::from_array(thread_rng().gen());
+        if point.length_squared() < 1.0 {
+            break point.normalize();
+        }
+    };
 
-        if best_hit.is_none() || hit.distance < best_hit.as_ref().unwrap().distance {
-            best_hit = Some(hit)
+    if sphere_vec.dot(normal) > 0.0 {
+        sphere_vec
+    } else {
+        -sphere_vec
+    }
+}
+
+fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u32) -> Vec3 {
+    let mut light = Vec3::splat(1.0);
+    let mut next_ray = ray;
+
+    for _ in 0..1 {
+        let mut best_hit: Option<Hit> = None;
+        for object in objects {
+            let Some(hit) = object.intersect(&next_ray) else {
+                continue;
+            };
+
+            if best_hit.is_none() || hit.distance < best_hit.as_ref().unwrap().distance {
+                best_hit = Some(hit)
+            }
+        }
+
+        if let Some(hit) = best_hit {
+            light *= hit.normal * 0.5 + 0.5; // should be fraction from material's bsdf
+            next_ray = Ray::new(next_ray.at(hit.distance), random_direction(hit.normal));
+        } else {
+            light *= environment;
+            break;
         }
     }
 
-    if let Some(hit) = best_hit {
-        hit.color
-        // pick random direction on hemisphere
-        // calculate incoming radiance (Vec3) from random direction
-        // calculate bsdf fraction (Vec3)
-        // multiply the two and return
-    } else {
-        environment
-    }
+    light
 }
 
 fn render(scene: &mut Scene) {
@@ -36,20 +56,27 @@ fn render(scene: &mut Scene) {
     let objects = &scene.objects;
     let samples_per_pixel = scene.render_settings.samples_per_pixel;
 
+    let pixel_width = film.world_width / (film.screen_width as f32);
+
     for y in 0..film.screen_height {
         for x in 0..film.screen_width {
             let mut color = Vec3::splat(0.0);
 
             for _ in 0..samples_per_pixel {
                 let offsets = thread_rng().gen::<(f32, f32)>();
-                let u = film.world_width * (offsets.0 + (x as f32)) / (film.screen_width as f32);
-                let v = film.world_height * (offsets.1 + (y as f32)) / (film.screen_height as f32);
+                let u = pixel_width * (offsets.0 + (x as f32));
+                let v = pixel_width * (offsets.1 + (y as f32));
 
                 let mut film_pos = film.world_position;
                 film_pos += u * film.world_u + v * film.world_v;
 
                 let camera_ray = Ray::new(camera.world_origin, film_pos - camera.world_origin);
-                color += ray_light(camera_ray, objects, scene.environment);
+                color += ray_light(
+                    camera_ray,
+                    objects,
+                    scene.environment,
+                    scene.render_settings.max_ray_depth,
+                );
             }
 
             film.set_pixel(x, y, color / (samples_per_pixel as f32));

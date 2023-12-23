@@ -1,4 +1,4 @@
-use glam::{vec3, Vec3};
+use glam::Vec3;
 
 pub const FLOAT_ERROR: f32 = 0.001;
 
@@ -63,10 +63,10 @@ pub struct Hit {
 impl RenderSettings {
     pub fn default() -> Self {
         RenderSettings {
-            samples_per_pixel: 8,
+            samples_per_pixel: 16,
             clip_near: 0.01,
             clip_far: 1000.0,
-            max_ray_depth: 8,
+            max_ray_depth: 4,
         }
     }
 }
@@ -89,29 +89,33 @@ impl Camera {
         up: Vec3,
         focal_length: f32,
     ) -> Self {
-        let film_world_width = 2.0;
-        let film_world_height = film_world_width * (screen_height as f32) / (screen_width as f32);
+        let world_width = 2.0;
+        let world_height = world_width * (screen_height as f32) / (screen_width as f32);
 
-        let world_look_at = look_at.normalize();
+        let world_forwards = (look_at - origin).normalize();
         let world_up = up.normalize();
+        let world_u = -world_forwards.cross(world_up);
+        let world_v = world_up;
+
+        let world_position = origin
+            + (-world_width * world_u / 2.0)
+            + (-world_height * world_v / 2.0)
+            + focal_length * world_forwards;
+
+        let film = Film {
+            screen_width,
+            screen_height,
+            world_width,
+            world_height,
+            world_position,
+            world_u,
+            world_v,
+            pixel_data: vec![Vec3::splat(0.0); (screen_width * screen_height) as usize],
+        };
 
         Camera {
             world_origin: origin,
-            film: Film {
-                screen_width,
-                screen_height,
-                world_width: film_world_width,
-                world_height: film_world_height,
-                world_position: origin
-                    + vec3(
-                        -film_world_width / 2.0,
-                        -film_world_height / 2.0,
-                        focal_length,
-                    ),
-                world_u: -world_look_at.cross(world_up),
-                world_v: world_up,
-                pixel_data: vec![Vec3::splat(0.0); (screen_width * screen_height) as usize],
-            },
+            film,
         }
     }
 }

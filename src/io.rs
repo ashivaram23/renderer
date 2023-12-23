@@ -136,7 +136,7 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
     Ok(Scene {
         camera,
         objects,
-        environment: vec3(0.3, 0.4, 0.9),
+        environment: vec3(0.0, 0.0, 1.0),
         render_settings: RenderSettings::default(),
     })
 }
