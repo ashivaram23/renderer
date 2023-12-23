@@ -2,9 +2,15 @@ use glam::{vec3, Vec3};
 
 pub const FLOAT_ERROR: f32 = 0.001;
 
+pub trait Object {
+    fn intersect(&self, ray: &Ray) -> Option<Hit>;
+}
+
 pub struct RenderSettings {
-    // samples per pixel, near and far clip, sky color, etc
-    // with defaults if user doesnt give
+    pub samples_per_pixel: u32,
+    pub clip_near: f32,
+    pub clip_far: f32,
+    pub max_ray_depth: u32,
 }
 
 pub struct Film {
@@ -21,6 +27,13 @@ pub struct Film {
 pub struct Camera {
     pub world_origin: Vec3,
     pub film: Film,
+}
+
+pub struct Scene {
+    pub camera: Camera,
+    pub objects: Vec<Box<dyn Object>>,
+    pub environment: Vec3,
+    pub render_settings: RenderSettings,
 }
 
 pub struct Ray {
@@ -47,8 +60,15 @@ pub struct Hit {
     pub color: Vec3,
 }
 
-pub trait Object {
-    fn intersect(&self, ray: &Ray) -> Option<Hit>;
+impl RenderSettings {
+    pub fn default() -> Self {
+        RenderSettings {
+            samples_per_pixel: 8,
+            clip_near: 0.01,
+            clip_far: 1000.0,
+            max_ray_depth: 8,
+        }
+    }
 }
 
 impl Film {

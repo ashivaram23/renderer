@@ -5,9 +5,9 @@ use std::process::exit;
 
 use glam::Vec3;
 use rand::{thread_rng, Rng};
-use structures::{Camera, Hit, Object, Ray};
+use structures::{Hit, Object, Ray, Scene};
 
-fn ray_hit_color(ray: Ray, objects: &[Box<dyn Object>]) -> Vec3 {
+fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3) -> Vec3 {
     let mut best_hit: Option<Hit> = None;
     for object in objects {
         let Some(hit) = object.intersect(&ray) else {
@@ -21,14 +21,20 @@ fn ray_hit_color(ray: Ray, objects: &[Box<dyn Object>]) -> Vec3 {
 
     if let Some(hit) = best_hit {
         hit.color
+        // pick random direction on hemisphere
+        // calculate incoming radiance (Vec3) from random direction
+        // calculate bsdf fraction (Vec3)
+        // multiply the two and return
     } else {
-        Vec3::splat(0.0)
+        environment
     }
 }
 
-fn send_rays(camera: &mut Camera, objects: &[Box<dyn Object>]) {
+fn render(scene: &mut Scene) {
+    let camera = &mut scene.camera;
     let film = &mut camera.film;
-    let samples_per_pixel = 10;
+    let objects = &scene.objects;
+    let samples_per_pixel = scene.render_settings.samples_per_pixel;
 
     for y in 0..film.screen_height {
         for x in 0..film.screen_width {
@@ -43,31 +49,31 @@ fn send_rays(camera: &mut Camera, objects: &[Box<dyn Object>]) {
                 film_pos += u * film.world_u + v * film.world_v;
 
                 let camera_ray = Ray::new(camera.world_origin, film_pos - camera.world_origin);
-                color += ray_hit_color(camera_ray, objects);
+                color += ray_light(camera_ray, objects, scene.environment);
             }
 
             film.set_pixel(x, y, color / (samples_per_pixel as f32));
         }
     }
 
-    camera.film.pixel_data[0] = Vec3::splat(0.5);
+    film.pixel_data[0] = Vec3::splat(0.5);
 }
 
 fn main() {
     let (input, output) = io::read_args().expect("Error reading arguments");
-    let (mut camera, objects) = match io::read_input(&input) {
-        Ok((camera, objects)) => (camera, objects),
+    let mut scene = match io::read_input(&input) {
+        Ok(scene) => scene,
         Err(error) => {
             println!("Error reading scene file: {}", error);
             exit(0);
         }
     };
 
-    let (width, height) = (camera.film.screen_width, camera.film.screen_height);
-    println!("Rendering scene with {} objects", objects.len());
+    println!("Rendering scene with {} objects", scene.objects.len());
+    render(&mut scene);
 
-    send_rays(&mut camera, &objects);
-
-    io::save_to_png(camera.film, &output).expect("Error writing to png file");
+    let film = &scene.camera.film;
+    let (width, height) = (film.screen_width, film.screen_height);
+    io::save_to_png(film, &output).expect("Error writing to png file");
     println!("Saved {}x{} image to {}", width, height, output)
 }
