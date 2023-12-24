@@ -1,0 +1,22 @@
+# to do
+
+- reordering and restructuring code to keep neat and clean and simple, as needed, throughout all of the changes and additions
+- materials in input json (can have both a materials top-level block for named materials (with type and parameters) and a material field in each object (replacing color) that can either be an object for a new material or a string for a named, OR can pick one or the other for easier parsing, eg all materials have to be named and referenced as strings, or all materials are attached to their objects) and modify structures and access accordingly
+- actually support rendering different materials glossy glass etc and bsdfs, and then further complex things and generalizations that allow eg subsurface scattering and others, and eventually full principled bsdf
+- triangles, intersections and normals including barycentric coordinates, handling thin faces and precision etc, and maybe other common primitives
+- object loading, structures for meshes with several triangles
+- bvh acceleration structure
+- all kinds of other light sources and also objects that are emitters, and also common adjustments like window thing
+- improvements like importance sampling, all the other advanced techniques as discussed in books etc, low discrepancy sequences
+- more integrators, techniques etc
+- textures, normal maps etc, also environment maps hdris for sky etc
+- volumes, physical media, etc
+- optimization, multithreading, and also refactoring as necessary to squeeze better performance, and also paying attention to memory efficiency and everything else
+- everything about color and radiance, spectral rendering, converting everything to spectral distributions, proper handling of values and tone map for final results and color spaces, storing in different formats with enough data, etc, also other postprocessing like denoising
+- tweak camera options for orthographic, proper field of view numbers maybe, and focus depth of field, and clarify coordinate systems and transforms if anything relevant there
+- display showing progressive render live, opening window with results, and maybe interaction live if fast render
+- after cpu done, add gpu render option through compute (doing the exact same calculations/features but faster with gpu) etc, and also (potentially separately) maybe some mode/option for realtime rendering movement and previewing
+- making it work with real things like blender api to directly render scenes from there, etc, and anything else with packaging and building deployment beyond command line
+- last checks to make sure watertight for user input, for the actual calculations like proper accuracy precision, etc
+- more customizability and functionality (in main program, but could also have utilities like conversion to scene file format to make usable with real world common formats, etc) and ease of use and better overall architecture wherever applicable
+- proper documentation of all things in code and also for system, like how left handed coordinates, and input file format etc, and comments in code
