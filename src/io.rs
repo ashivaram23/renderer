@@ -7,11 +7,11 @@ use std::{
 };
 
 use crate::{
-    objects::{Object, Sphere, Triangle},
+    objects::{Mesh, Object, Sphere, Triangle},
     scene::{Camera, Film, RenderSettings, Scene},
 };
 use clap::{Arg, Command};
-use glam::{vec3, Vec3};
+use glam::{vec3, UVec3, Vec3};
 use png::Encoder;
 use serde::Deserialize;
 use serde_json::{from_str, from_value, Map, Value};
@@ -42,6 +42,13 @@ struct TriangleParams {
     point1: [f32; 3],
     point2: [f32; 3],
     point3: [f32; 3],
+    color: [f32; 3],
+}
+
+#[derive(Deserialize, Debug)]
+struct MeshParams {
+    vertices: Vec<[f32; 3]>,
+    indices: Vec<[u32; 3]>,
     color: [f32; 3],
 }
 
@@ -126,6 +133,31 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
                     Vec3::from_array(triangle_params.point2),
                     Vec3::from_array(triangle_params.point3),
                     Vec3::from_array(triangle_params.color),
+                )));
+            }
+            Some("mesh") => {
+                let Ok(mesh_params) = from_value::<MeshParams>(object.clone()) else {
+                    return Err(SceneParseError {
+                        message: format!("Mesh object {} has invalid parameters", name),
+                    });
+                };
+
+                let vertices = mesh_params
+                    .vertices
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect();
+
+                let indices = mesh_params
+                    .indices
+                    .into_iter()
+                    .map(UVec3::from_array)
+                    .collect();
+
+                objects.push(Box::new(Mesh::new(
+                    vertices,
+                    indices,
+                    Vec3::from_array(mesh_params.color),
                 )));
             }
             _ => {

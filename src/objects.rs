@@ -1,4 +1,4 @@
-use glam::Vec3;
+use glam::{UVec3, Vec3};
 
 const FLOAT_ERROR: f32 = 0.001;
 
@@ -27,6 +27,14 @@ pub struct Triangle {
     point1: Vec3,
     point2: Vec3,
     point3: Vec3,
+    color: Vec3,
+}
+
+pub struct Mesh {
+    bounds_min: Vec3,
+    bounds_max: Vec3,
+    vertices: Vec<Vec3>,
+    indices: Vec<UVec3>,
     color: Vec3,
 }
 
@@ -127,5 +135,65 @@ impl Object for Triangle {
                 color: self.color,
             })
         }
+    }
+}
+
+impl Mesh {
+    pub fn new(vertices: Vec<Vec3>, indices: Vec<UVec3>, color: Vec3) -> Self {
+        let mut bounds_min = vertices[0];
+        let mut bounds_max = vertices[0];
+
+        for vertex in &vertices {
+            bounds_min = vertex.min(bounds_min);
+            bounds_max = vertex.max(bounds_max);
+        }
+
+        Mesh {
+            bounds_min,
+            bounds_max,
+            vertices,
+            indices,
+            color,
+        }
+    }
+}
+
+impl Object for Mesh {
+    fn intersect(&self, ray: &Ray) -> Option<Hit> {
+        // VERY UGLY CODE, sloppy and also INEFFICIENT! rewrite, include bounding box check first, clean up
+        let mut best_hit: Option<Hit> = None;
+        for triangle in &self.indices {
+            let point1 = self.vertices[triangle.x as usize];
+            let point2 = self.vertices[triangle.y as usize];
+            let point3 = self.vertices[triangle.z as usize];
+
+            let e1 = point2 - point1;
+            let e2 = point3 - point1;
+            let s = ray.origin - point1;
+
+            let q = ray.direction.cross(e2);
+            let r = s.cross(e1);
+
+            let a = q.dot(e1);
+            if a.abs() < FLOAT_ERROR || ray.direction.dot(e2.cross(e1).normalize()) > 0.0 {
+                continue;
+            }
+
+            let f = 1.0 / q.dot(e1);
+            let u = f * s.dot(q);
+            let v = f * ray.direction.dot(r);
+
+            if u < 0.0 || v < 0.0 || u + v > 1.0 || f * e2.dot(r) < FLOAT_ERROR {
+                continue;
+            } else if best_hit.is_none() || f * e2.dot(r) < best_hit.as_ref().unwrap().distance {
+                best_hit = Some(Hit {
+                    distance: f * e2.dot(r),
+                    normal: e2.cross(e1).normalize(),
+                    color: self.color,
+                })
+            }
+        }
+
+        best_hit
     }
 }
