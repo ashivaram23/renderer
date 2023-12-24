@@ -25,7 +25,7 @@ pub struct Camera {
 
 pub struct Scene {
     pub camera: Camera,
-    pub objects: Vec<Box<dyn Object>>,
+    pub objects: Vec<Box<dyn Object + Sync>>,
     pub environment: Vec3,
     pub render_settings: RenderSettings,
 }

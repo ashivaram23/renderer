@@ -93,7 +93,7 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
         1.0,
     );
 
-    let mut objects: Vec<Box<dyn Object>> = Vec::new();
+    let mut objects: Vec<Box<dyn Object + Sync>> = Vec::new();
     for (name, object) in scene_params.objects.iter_mut() {
         let Some(object_map) = object.as_object_mut() else {
             return Err(SceneParseError {
@@ -114,6 +114,12 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
                         message: format!("Sphere object {} has invalid parameters", name),
                     });
                 };
+
+                if sphere_params.radius < 0.0 {
+                    return Err(SceneParseError {
+                        message: format!("Sphere object {} has negative radius", name),
+                    });
+                }
 
                 objects.push(Box::new(Sphere::new(
                     Vec3::from_array(sphere_params.center),
@@ -141,6 +147,15 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
                         message: format!("Mesh object {} has invalid parameters", name),
                     });
                 };
+
+                for triangle in &mesh_params.indices {
+                    let highest_index = triangle[0].max(triangle[1]).max(triangle[2]) as usize;
+                    if highest_index >= mesh_params.vertices.len() {
+                        return Err(SceneParseError {
+                            message: format!("Mesh object {} has indices out of bounds", name),
+                        });
+                    }
+                }
 
                 let vertices = mesh_params
                     .vertices

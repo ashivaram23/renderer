@@ -2,11 +2,12 @@ mod io;
 mod objects;
 mod scene;
 
-use std::process::exit;
+use std::{process::exit, time::Instant};
 
 use glam::Vec3;
 use objects::{Hit, Object, Ray};
 use rand::{thread_rng, Rng};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
 fn random_direction(normal: Vec3) -> Vec3 {
@@ -24,7 +25,7 @@ fn random_direction(normal: Vec3) -> Vec3 {
     }
 }
 
-fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u32) -> Vec3 {
+fn ray_light(ray: Ray, objects: &[Box<dyn Object + Sync>], environment: Vec3, depth: u32) -> Vec3 {
     let mut light = Vec3::splat(1.0);
     let mut next_ray = ray;
 
@@ -61,12 +62,17 @@ fn render(scene: &mut Scene) {
     let camera = &mut scene.camera;
     let film = &mut camera.film;
     let objects = &scene.objects;
+
     let samples_per_pixel = scene.render_settings.samples_per_pixel;
-
     let pixel_width = film.world_width / (film.screen_width as f32);
+    let start_time = Instant::now();
 
-    for y in 0..film.screen_height {
-        for x in 0..film.screen_width {
+    (0..film.screen_height * film.screen_width)
+        .into_par_iter()
+        .map(|i| {
+            let y = film.screen_height - 1 - (i / film.screen_width);
+            let x = i % film.screen_width;
+
             let mut color = Vec3::splat(0.0);
 
             for _ in 0..samples_per_pixel {
@@ -86,9 +92,15 @@ fn render(scene: &mut Scene) {
                 );
             }
 
-            film.set_pixel(x, y, color / (samples_per_pixel as f32));
-        }
-    }
+            color / (samples_per_pixel as f32)
+
+            // film.pixel_data[i as usize] = color / (samples_per_pixel as f32);
+
+            // film.set_pixel(x, y, color / (samples_per_pixel as f32));
+        })
+        .collect_into_vec(&mut film.pixel_data);
+
+    println!("Rendered in {:.2?}", start_time.elapsed());
 
     film.pixel_data[0] = Vec3::splat(0.5);
 }
