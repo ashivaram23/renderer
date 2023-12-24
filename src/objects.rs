@@ -118,7 +118,7 @@ impl Object for Triangle {
         let u = f * s.dot(q);
         let v = f * ray.direction.dot(r);
 
-        if u < 0.0 || v < 0.0 || u + v > 1.0 {
+        if u < 0.0 || v < 0.0 || u + v > 1.0 || f * e2.dot(r) < FLOAT_ERROR {
             None
         } else {
             Some(Hit {

@@ -42,7 +42,12 @@ fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u3
 
         if let Some(hit) = best_hit {
             light *= hit.color; // should be fraction from material's bsdf
-            next_ray = Ray::new(next_ray.at(hit.distance), random_direction(hit.normal));
+            let incident =
+                next_ray.direction - 2.0 * (next_ray.direction.dot(hit.normal)) * hit.normal;
+            next_ray = Ray::new(
+                next_ray.at(hit.distance),
+                (4.0 * incident + 0.0 * random_direction(hit.normal)) / 4.0,
+            );
         } else {
             light *= environment;
             break;
