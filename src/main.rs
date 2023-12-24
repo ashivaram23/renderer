@@ -1,11 +1,13 @@
 mod io;
-mod structures;
+mod objects;
+mod scene;
 
 use std::process::exit;
 
 use glam::Vec3;
+use objects::{Hit, Object, Ray};
 use rand::{thread_rng, Rng};
-use structures::{Hit, Object, Ray, Scene};
+use scene::Scene;
 
 fn random_direction(normal: Vec3) -> Vec3 {
     let sphere_vec = loop {

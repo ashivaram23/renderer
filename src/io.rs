@@ -6,7 +6,10 @@ use std::{
     path::Path,
 };
 
-use crate::structures::{Camera, Film, Object, Quad, RenderSettings, Scene, Sphere};
+use crate::{
+    objects::{Object, Sphere, Triangle},
+    scene::{Camera, Film, RenderSettings, Scene},
+};
 use clap::{Arg, Command};
 use glam::{vec3, Vec3};
 use png::Encoder;
@@ -35,10 +38,10 @@ struct SphereParams {
 }
 
 #[derive(Deserialize, Debug)]
-struct QuadParams {
-    corner: [f32; 3],
-    u: [f32; 3],
-    v: [f32; 3],
+struct TriangleParams {
+    point1: [f32; 3],
+    point2: [f32; 3],
+    point3: [f32; 3],
     color: [f32; 3],
 }
 
@@ -111,18 +114,18 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
                     Vec3::from_array(sphere_params.color),
                 )));
             }
-            Some("quad") => {
-                let Ok(quad_params) = from_value::<QuadParams>(object.clone()) else {
+            Some("triangle") => {
+                let Ok(triangle_params) = from_value::<TriangleParams>(object.clone()) else {
                     return Err(SceneParseError {
-                        message: format!("Quad object {} has invalid parameters", name),
+                        message: format!("Triangle object {} has invalid parameters", name),
                     });
                 };
 
-                objects.push(Box::new(Quad::new(
-                    Vec3::from_array(quad_params.corner),
-                    Vec3::from_array(quad_params.u),
-                    Vec3::from_array(quad_params.v),
-                    Vec3::from_array(quad_params.color),
+                objects.push(Box::new(Triangle::new(
+                    Vec3::from_array(triangle_params.point1),
+                    Vec3::from_array(triangle_params.point2),
+                    Vec3::from_array(triangle_params.point3),
+                    Vec3::from_array(triangle_params.color),
                 )));
             }
             _ => {
