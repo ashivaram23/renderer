@@ -100,8 +100,13 @@ fn main() {
         }
     };
 
+    println!(
+        "Rendering scene with {} objects, {} samples per pixel",
+        scene.objects.len(),
+        scene.render_settings.samples_per_pixel
+    );
+
     let start_time = Instant::now();
-    println!("Rendering scene with {} objects", scene.objects.len());
     render(&mut scene);
     println!("Rendered in {:.2?}", start_time.elapsed());
 
@@ -110,3 +115,14 @@ fn main() {
     io::save_to_png(film, &output).expect("Error writing to png file");
     println!("Saved {}x{} image to {}", width, height, output)
 }
+
+// Todo--
+// - mesh triangle gap problem (maybe adjust floating point epsilon value etc)
+// - bounding volume hierarchy and other performance things until monkey scene
+//   with 16 spp and 8 depth is down to under 6 seconds (cycles was 2.39)
+// - whatever is making the shadows much much weaker than what cycles shows
+// - actual obj loading from filename (can use crate, or not)
+// - then continue with all the other things (materials, better sampler, lights,
+//   importance sampling and all the other techniques, MORE performance and
+//   efficiency things wherever possible, robustness, clean neat commented code
+//   and well structured architecture, gpu mode, everything else in todo.md)

@@ -1,6 +1,6 @@
 use glam::{UVec3, Vec3};
 
-const FLOAT_ERROR: f32 = 0.0001;
+const FLOAT_ERROR: f32 = 0.00001;
 
 pub trait Object {
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
