@@ -31,6 +31,7 @@ fn ray_light(ray: Ray, objects: &[Box<dyn Object + Sync>], environment: Vec3, de
 
     for _ in 0..depth {
         let mut best_hit: Option<Hit> = None;
+
         for object in objects {
             let Some(hit) = object.intersect(&next_ray) else {
                 continue;
@@ -42,13 +43,8 @@ fn ray_light(ray: Ray, objects: &[Box<dyn Object + Sync>], environment: Vec3, de
         }
 
         if let Some(hit) = best_hit {
-            light *= hit.color; // should be fraction from material's bsdf
-            let incident =
-                next_ray.direction - 2.0 * (next_ray.direction.dot(hit.normal)) * hit.normal;
-            next_ray = Ray::new(
-                next_ray.at(hit.distance),
-                (0.0 * incident + 4.0 * random_direction(hit.normal)) / 4.0,
-            );
+            light *= hit.color;
+            next_ray = Ray::new(next_ray.at(hit.distance), random_direction(hit.normal));
         } else {
             light *= environment;
             break;
@@ -65,25 +61,22 @@ fn render(scene: &mut Scene) {
 
     let samples_per_pixel = scene.render_settings.samples_per_pixel;
     let pixel_width = film.world_width / (film.screen_width as f32);
-    let start_time = Instant::now();
 
-    (0..film.screen_height * film.screen_width)
+    (0..film.screen_width * film.screen_height)
         .into_par_iter()
+        .panic_fuse()
         .map(|i| {
-            let y = film.screen_height - 1 - (i / film.screen_width);
             let x = i % film.screen_width;
-
+            let y = film.screen_height - 1 - (i / film.screen_width);
             let mut color = Vec3::splat(0.0);
 
             for _ in 0..samples_per_pixel {
-                let offsets = thread_rng().gen::<(f32, f32)>();
-                let u = pixel_width * (offsets.0 + (x as f32));
-                let v = pixel_width * (offsets.1 + (y as f32));
+                let u = pixel_width * (thread_rng().gen::<f32>() + (x as f32));
+                let v = pixel_width * (thread_rng().gen::<f32>() + (y as f32));
 
-                let mut film_pos = film.world_position;
-                film_pos += u * film.world_u + v * film.world_v;
-
+                let film_pos = film.world_position + u * film.world_u + v * film.world_v;
                 let camera_ray = Ray::new(camera.world_origin, film_pos - camera.world_origin);
+
                 color += ray_light(
                     camera_ray,
                     objects,
@@ -93,16 +86,8 @@ fn render(scene: &mut Scene) {
             }
 
             color / (samples_per_pixel as f32)
-
-            // film.pixel_data[i as usize] = color / (samples_per_pixel as f32);
-
-            // film.set_pixel(x, y, color / (samples_per_pixel as f32));
         })
         .collect_into_vec(&mut film.pixel_data);
-
-    println!("Rendered in {:.2?}", start_time.elapsed());
-
-    film.pixel_data[0] = Vec3::splat(0.5);
 }
 
 fn main() {
@@ -115,8 +100,10 @@ fn main() {
         }
     };
 
+    let start_time = Instant::now();
     println!("Rendering scene with {} objects", scene.objects.len());
     render(&mut scene);
+    println!("Rendered in {:.2?}", start_time.elapsed());
 
     let film = &scene.camera.film;
     let (width, height) = (film.screen_width, film.screen_height);

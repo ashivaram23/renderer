@@ -1,6 +1,6 @@
 use glam::{UVec3, Vec3};
 
-const FLOAT_ERROR: f32 = 0.001;
+const FLOAT_ERROR: f32 = 0.0001;
 
 pub trait Object {
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
@@ -63,32 +63,31 @@ impl Sphere {
 
 impl Object for Sphere {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        let b = (2.0 * ray.direction).dot(ray.origin - self.center);
-        let c = (ray.origin - self.center).dot(ray.origin - self.center) - self.radius.powi(2);
-        let discriminant = b * b - 4.0 * c;
+        let radius_sq = self.radius * self.radius;
+        let origin_to_center = self.center - ray.origin;
+        let origin_to_center_sq = origin_to_center.length_squared();
 
-        if discriminant < 0.0 {
+        let projection_on_ray = origin_to_center.dot(ray.direction);
+        if projection_on_ray < 0.0 || origin_to_center_sq < radius_sq {
             return None;
         }
 
-        let sqrt_discriminant = discriminant.sqrt();
-        let first_hit = (-b - sqrt_discriminant) / 2.0;
-        let second_hit = (-b + sqrt_discriminant) / 2.0;
+        let center_to_projection_sq = origin_to_center_sq - projection_on_ray * projection_on_ray;
+        if center_to_projection_sq > radius_sq {
+            return None;
+        }
 
-        if first_hit > FLOAT_ERROR {
-            Some(Hit {
-                distance: first_hit,
-                normal: (ray.at(first_hit) - self.center).normalize(),
-                color: self.color,
-            })
-        } else if second_hit > FLOAT_ERROR {
-            Some(Hit {
-                distance: second_hit,
-                normal: (ray.at(second_hit) - self.center).normalize(),
-                color: self.color,
-            })
-        } else {
+        let projection_to_hit = (radius_sq - center_to_projection_sq).sqrt();
+        let hit_distance = projection_on_ray - projection_to_hit;
+
+        if hit_distance < FLOAT_ERROR {
             None
+        } else {
+            Some(Hit {
+                distance: hit_distance,
+                normal: (ray.at(hit_distance) - self.center).normalize(),
+                color: self.color,
+            })
         }
     }
 }
@@ -106,35 +105,13 @@ impl Triangle {
 
 impl Object for Triangle {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        //todo!(); // rewrite this properly. also this is VERY SLOW!
-        // also something is very wrong with the coloring, things are too dark
-        // maybe extra bounces due to self intersections or something? test not parallel? or BACKFACE reintersection problems? or something else?
-        let e1 = self.point2 - self.point1;
-        let e2 = self.point3 - self.point1;
-        let s = ray.origin - self.point1;
-
-        let q = ray.direction.cross(e2);
-        let r = s.cross(e1);
-
-        let a = q.dot(e1);
-        if a.abs() < FLOAT_ERROR || ray.direction.dot(e2.cross(e1).normalize()) > 0.0 {
-            // something here?
-            return None;
-        }
-
-        let f = 1.0 / q.dot(e1);
-        let u = f * s.dot(q);
-        let v = f * ray.direction.dot(r);
-
-        if u < 0.0 || v < 0.0 || u + v > 1.0 || f * e2.dot(r) < FLOAT_ERROR {
-            None
-        } else {
-            Some(Hit {
-                distance: f * e2.dot(r),
-                normal: e2.cross(e1).normalize(),
+        intersect_triangle(ray, self.point1, self.point2, self.point3).map(|(distance, normal)| {
+            Hit {
+                distance,
+                normal,
                 color: self.color,
-            })
-        }
+            }
+        })
     }
 }
 
@@ -148,6 +125,9 @@ impl Mesh {
             bounds_max = vertex.max(bounds_max);
         }
 
+        bounds_min -= Vec3::splat(FLOAT_ERROR);
+        bounds_max += Vec3::splat(FLOAT_ERROR);
+
         Mesh {
             bounds_min,
             bounds_max,
@@ -160,40 +140,64 @@ impl Mesh {
 
 impl Object for Mesh {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        // VERY UGLY CODE, sloppy and also INEFFICIENT! rewrite, include bounding box check first, clean up
+        let near = (self.bounds_min - ray.origin) / ray.direction;
+        let far = (self.bounds_max - ray.origin) / ray.direction;
+
+        let min_distance = near.min(far).max_element().max(FLOAT_ERROR);
+        let max_distance = far.max(near).min_element().min(f32::INFINITY);
+        if min_distance >= max_distance {
+            return None;
+        }
+
         let mut best_hit: Option<Hit> = None;
+
         for triangle in &self.indices {
-            let point1 = self.vertices[triangle.x as usize];
-            let point2 = self.vertices[triangle.y as usize];
-            let point3 = self.vertices[triangle.z as usize];
+            let p1 = self.vertices[triangle.x as usize];
+            let p2 = self.vertices[triangle.y as usize];
+            let p3 = self.vertices[triangle.z as usize];
 
-            let e1 = point2 - point1;
-            let e2 = point3 - point1;
-            let s = ray.origin - point1;
-
-            let q = ray.direction.cross(e2);
-            let r = s.cross(e1);
-
-            let a = q.dot(e1);
-            if a.abs() < FLOAT_ERROR || ray.direction.dot(e2.cross(e1).normalize()) > 0.0 {
+            let Some((distance, normal)) = intersect_triangle(ray, p1, p2, p3) else {
                 continue;
-            }
+            };
 
-            let f = 1.0 / q.dot(e1);
-            let u = f * s.dot(q);
-            let v = f * ray.direction.dot(r);
-
-            if u < 0.0 || v < 0.0 || u + v > 1.0 || f * e2.dot(r) < FLOAT_ERROR {
-                continue;
-            } else if best_hit.is_none() || f * e2.dot(r) < best_hit.as_ref().unwrap().distance {
+            if best_hit.is_none() || distance < best_hit.as_ref().unwrap().distance {
                 best_hit = Some(Hit {
-                    distance: f * e2.dot(r),
-                    normal: e2.cross(e1).normalize(),
+                    distance,
+                    normal,
                     color: self.color,
                 })
             }
         }
 
         best_hit
+    }
+}
+
+fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, Vec3)> {
+    let side1 = p2 - p1;
+    let side2 = p3 - p1;
+
+    let normal = side2.cross(side1);
+    let ray_cross_side2 = ray.direction.cross(side2);
+    let denominator = side1.dot(ray_cross_side2);
+    if denominator.abs() < FLOAT_ERROR || ray.direction.dot(normal) > 0.0 {
+        return None;
+    }
+
+    let fraction = 1.0 / denominator;
+    let p1_to_origin = ray.origin - p1;
+    let u = fraction * p1_to_origin.dot(ray_cross_side2);
+    if u < 0.0 {
+        return None;
+    }
+
+    let p1_to_origin_cross_side1 = p1_to_origin.cross(side1);
+    let v = fraction * ray.direction.dot(p1_to_origin_cross_side1);
+    let hit_distance = fraction * side2.dot(p1_to_origin_cross_side1);
+
+    if v < 0.0 || u + v > 1.0 || hit_distance < FLOAT_ERROR {
+        None
+    } else {
+        Some((hit_distance, normal.normalize()))
     }
 }

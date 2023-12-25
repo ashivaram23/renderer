@@ -33,17 +33,8 @@ pub struct Scene {
 impl RenderSettings {
     pub fn default() -> Self {
         RenderSettings {
-            samples_per_pixel: 16,
+            samples_per_pixel: 128,
             max_ray_depth: 8,
-        }
-    }
-}
-
-impl Film {
-    pub fn set_pixel(&mut self, x: u32, y: u32, color: Vec3) {
-        if x < self.screen_width && y < self.screen_height {
-            let index = (self.screen_height - y - 1) * self.screen_width + x;
-            self.pixel_data[index as usize] = color;
         }
     }
 }
