@@ -33,7 +33,7 @@ pub struct Scene {
 impl RenderSettings {
     pub fn default() -> Self {
         RenderSettings {
-            samples_per_pixel: 128,
+            samples_per_pixel: 16,
             max_ray_depth: 8,
         }
     }
