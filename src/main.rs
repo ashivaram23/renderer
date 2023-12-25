@@ -2,27 +2,37 @@ mod io;
 mod objects;
 mod scene;
 
-use std::{process::exit, time::Instant};
+use std::{f32::consts::PI, process::exit, time::Instant};
 
-use glam::Vec3;
+use glam::{Mat4, Vec3};
 use objects::{Hit, Object, Ray};
 use rand::{thread_rng, Rng};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
 fn random_direction(normal: Vec3) -> Vec3 {
-    let sphere_vec = loop {
-        let point = Vec3::from_array(thread_rng().gen()) * 2.0 - 1.0;
-        if point.length_squared() < 1.0 {
-            break point.normalize();
-        }
-    };
+    let r = thread_rng().gen::<f32>().sqrt();
+    let theta = 2.0 * PI * thread_rng().gen::<f32>();
 
-    if sphere_vec.dot(normal) > 0.0 {
-        sphere_vec
-    } else {
-        -sphere_vec
-    }
+    let x = r * theta.cos();
+    let z = r * theta.sin();
+    let y = (1.0 - x * x - z * z).max(0.0).sqrt();
+
+    let rotation = Mat4::from_axis_angle((normal + Vec3::new(0.0, 1.0, 0.0)) / 2.0, PI);
+    rotation.transform_vector3(Vec3::new(x, y, z))
+
+    // let sphere_vec = loop {
+    //     let point = Vec3::from_array(thread_rng().gen()) * 2.0 - 1.0;
+    //     if point.length_squared() < 1.0 {
+    //         break point.normalize();
+    //     }
+    // };
+
+    // if sphere_vec.dot(normal) > 0.0 {
+    //     sphere_vec
+    // } else {
+    //     -sphere_vec
+    // }
 }
 
 fn ray_light(ray: Ray, objects: &[Box<dyn Object + Sync>], environment: Vec3, depth: u32) -> Vec3 {
@@ -118,6 +128,11 @@ fn main() {
 
 // Todo--
 // - mesh triangle gap problem (maybe adjust floating point epsilon value etc)
+// - proper, faster random direction sampling, cosine weighted etc
+// - fix the diffuse thing properly for the cosines? thats why it looks wrong,
+//   and brdf should weight the rays based on that (both the sampler, for now
+//   while everything remains diffuse-only, AND the diffuse brdfs should change,
+//   but especially the brdfs,, sampler can be anything for more or less noise)
 // - bounding volume hierarchy and other performance things until monkey scene
 //   with 16 spp and 8 depth is down to under 6 seconds (cycles was 2.39)
 // - whatever is making the shadows much much weaker than what cycles shows
