@@ -193,7 +193,7 @@ fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, V
     let normal = side2.cross(side1);
     let ray_cross_side2 = ray.direction.cross(side2);
     let denominator = side1.dot(ray_cross_side2);
-    if denominator.abs() < FLOAT_ERROR || ray.direction.dot(normal) > 0.0 {
+    if denominator.abs() < FLOAT_ERROR {
         return None;
     }
 

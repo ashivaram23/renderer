@@ -10,9 +10,11 @@ use rand::{thread_rng, Rng};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
-// faster aabb tests and other insights from profiler
-// try bvh surface area heuristic
+// try progressive multi jitter (pmj or pmjbn, try efficient method) for camera rays, check noise reduction and time increase
+// try bvh surface area heuristic!
 // later: area lights etc, uvs and textures and normals smooth shade, materials glass etc,
+// remember to eventually comment code well with all methods, details (eg left handed), sources etc
+// pub trait Material with bsdf() -> f32 and random_direction_pdf() -> (Vec3, f32) returning direction and pdf
 
 fn random_direction(normal: Vec3) -> Vec3 {
     let r = thread_rng().gen::<f32>().sqrt();
