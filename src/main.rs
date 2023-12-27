@@ -2,27 +2,25 @@ mod io;
 mod objects;
 mod scene;
 
-use std::{process::exit, time::Instant};
+use std::{f32::consts::PI, process::exit, time::Instant};
 
-use glam::Vec3;
+use glam::{Mat4, Vec3};
 use objects::{Hit, Object, Ray};
 use rand::{thread_rng, Rng};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
 fn random_direction(normal: Vec3) -> Vec3 {
-    let sphere_vec = loop {
-        let point = Vec3::from_array(thread_rng().gen()) * 2.0 - 1.0;
-        if point.length_squared() < 1.0 {
-            break point.normalize();
-        }
-    };
+    let r = thread_rng().gen::<f32>().sqrt();
+    let theta = 2.0 * PI * thread_rng().gen::<f32>();
 
-    if sphere_vec.dot(normal) > 0.0 {
-        sphere_vec
-    } else {
-        -sphere_vec
-    }
+    let x = r * theta.cos();
+    let z = r * theta.sin();
+    let y = (1.0 - x * x - z * z).max(0.0).sqrt();
+
+    let tangent_space_up = Vec3::new(0.0, 1.0, 0.0);
+    let rotation = Mat4::from_axis_angle(((normal + tangent_space_up) / 2.0).normalize(), PI);
+    rotation.transform_vector3(Vec3::new(x, y, z))
 }
 
 fn ray_light(ray: Ray, objects: &[Box<dyn Object + Sync>], environment: Vec3, depth: u32) -> Vec3 {
@@ -43,9 +41,8 @@ fn ray_light(ray: Ray, objects: &[Box<dyn Object + Sync>], environment: Vec3, de
         }
 
         if let Some(hit) = best_hit {
-            let new_direction = random_direction(hit.normal);
-            light *= hit.color * hit.normal.dot(new_direction) * 2.0;
-            next_ray = Ray::new(next_ray.at(hit.distance), new_direction);
+            light *= hit.color;
+            next_ray = Ray::new(next_ray.at(hit.distance), random_direction(hit.normal));
         } else {
             light *= environment;
             break;
@@ -116,16 +113,3 @@ fn main() {
     io::save_to_png(film, &output).expect("Error writing to png file");
     println!("Saved {}x{} image to {}", width, height, output)
 }
-
-// Todo--
-// - eventually make better random direction choosing because very inefficient,
-//   and also add the brdf weighting for less variance once materials ready
-// - incorporate materials in input.json and restructure io.rs for cleaner
-// - bounding volume hierarchy and other performance things until monkey scene
-//   with 16 spp and 8 depth is down to under 6 seconds (cycles was 2.39)
-// - whatever is making the shadows much much weaker than what cycles shows
-// - actual obj loading from filename (can use crate, or not)
-// - then continue with all the other things (materials, better sampler, lights,
-//   importance sampling and all the other techniques, MORE performance and
-//   efficiency things wherever possible, robustness, clean neat commented code
-//   and well structured architecture, gpu mode, everything else in todo.md)
