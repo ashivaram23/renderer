@@ -1,6 +1,11 @@
-use glam::{UVec3, Vec3};
+use std::collections::VecDeque;
+
+use glam::Vec3;
+use rayon::slice::ParallelSliceMut;
 
 const FLOAT_ERROR: f32 = 0.00001;
+const BVH_NODE_CHILDREN: usize = 4;
+const BVH_LEAF_MAX: usize = 12;
 
 pub trait Object {
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
@@ -31,11 +36,18 @@ pub struct Triangle {
 }
 
 pub struct Mesh {
+    vertices: Vec<Vec3>,
+    indices: Vec<[u32; 3]>,
+    color: Vec3,
+    bounds: BoundingBox,
+}
+
+struct BoundingBox {
+    start_index: usize,
+    end_index: usize,
     bounds_min: Vec3,
     bounds_max: Vec3,
-    vertices: Vec<Vec3>,
-    indices: Vec<UVec3>,
-    color: Vec3,
+    children: Vec<BoundingBox>,
 }
 
 impl Ray {
@@ -116,56 +128,63 @@ impl Object for Triangle {
 }
 
 impl Mesh {
-    pub fn new(vertices: Vec<Vec3>, indices: Vec<UVec3>, color: Vec3) -> Self {
-        let mut bounds_min = vertices[0];
-        let mut bounds_max = vertices[0];
-
-        for vertex in &vertices {
-            bounds_min = vertex.min(bounds_min);
-            bounds_max = vertex.max(bounds_max);
-        }
-
-        bounds_min -= Vec3::splat(FLOAT_ERROR);
-        bounds_max += Vec3::splat(FLOAT_ERROR);
+    pub fn new(vertices: Vec<Vec3>, mut indices: Vec<[u32; 3]>, color: Vec3) -> Self {
+        let length = indices.len();
+        let bounds = make_bvh(&vertices, &mut indices, 0, length);
 
         Mesh {
-            bounds_min,
-            bounds_max,
             vertices,
             indices,
             color,
+            bounds,
         }
     }
 }
 
 impl Object for Mesh {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        let near = (self.bounds_min - ray.origin) / ray.direction;
-        let far = (self.bounds_max - ray.origin) / ray.direction;
-
-        let min_distance = near.min(far).max_element().max(FLOAT_ERROR);
-        let max_distance = far.max(near).min_element().min(f32::INFINITY);
-        if min_distance >= max_distance {
-            return None;
-        }
-
         let mut best_hit: Option<Hit> = None;
 
-        for triangle in &self.indices {
-            let p1 = self.vertices[triangle.x as usize];
-            let p2 = self.vertices[triangle.y as usize];
-            let p3 = self.vertices[triangle.z as usize];
+        let mut candidates: VecDeque<&BoundingBox> =
+            VecDeque::with_capacity(BVH_NODE_CHILDREN * BVH_NODE_CHILDREN);
+        candidates.push_back(&self.bounds);
 
-            let Some((distance, normal)) = intersect_triangle(ray, p1, p2, p3) else {
+        while !candidates.is_empty() {
+            let next_candidate = candidates.pop_front().unwrap();
+            let near = (next_candidate.bounds_min - ray.origin) / ray.direction;
+            let far = (next_candidate.bounds_max - ray.origin) / ray.direction;
+
+            let min_distance = near.min(far).max_element().max(FLOAT_ERROR);
+            let max_distance = far.max(near).min_element().min(f32::INFINITY);
+            if min_distance >= max_distance {
                 continue;
-            };
+            }
 
-            if best_hit.is_none() || distance < best_hit.as_ref().unwrap().distance {
-                best_hit = Some(Hit {
-                    distance,
-                    normal,
-                    color: self.color,
-                })
+            if !next_candidate.children.is_empty() {
+                for child in &next_candidate.children {
+                    candidates.push_back(child);
+                }
+
+                continue;
+            }
+
+            let triangles = &self.indices[next_candidate.start_index..next_candidate.end_index];
+            for triangle in triangles {
+                let p1 = self.vertices[triangle[0] as usize];
+                let p2 = self.vertices[triangle[1] as usize];
+                let p3 = self.vertices[triangle[2] as usize];
+
+                let Some((distance, normal)) = intersect_triangle(ray, p1, p2, p3) else {
+                    continue;
+                };
+
+                if best_hit.is_none() || distance < best_hit.as_ref().unwrap().distance {
+                    best_hit = Some(Hit {
+                        distance,
+                        normal,
+                        color: self.color,
+                    })
+                }
             }
         }
 
@@ -199,5 +218,68 @@ fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, V
         None
     } else {
         Some((hit_distance, normal.normalize()))
+    }
+}
+
+fn make_bvh(vertices: &[Vec3], indices: &mut [[u32; 3]], start: usize, end: usize) -> BoundingBox {
+    let mut bounds_min = vertices[indices[start][0] as usize];
+    let mut bounds_max = vertices[indices[start][0] as usize];
+
+    for triangle in indices[start..end].iter() {
+        for index in triangle {
+            let vertex = vertices[*index as usize];
+            bounds_min = vertex.min(bounds_min);
+            bounds_max = vertex.max(bounds_max);
+        }
+    }
+
+    bounds_min -= Vec3::splat(FLOAT_ERROR);
+    bounds_max += Vec3::splat(FLOAT_ERROR);
+
+    if end - start <= BVH_LEAF_MAX {
+        return BoundingBox {
+            start_index: start,
+            end_index: end,
+            bounds_min,
+            bounds_max,
+            children: Vec::new(),
+        };
+    }
+
+    let range = (bounds_max - bounds_min).to_array();
+    let mut best_axis = 0;
+    for i in 1..3 {
+        if range[i] > range[best_axis] {
+            best_axis = i;
+        }
+    }
+
+    indices[start..end].par_sort_unstable_by_key(|triangle| {
+        triangle
+            .iter()
+            .map(|i| vertices[*i as usize][best_axis])
+            .sum::<f32>() as i64
+    });
+
+    let mut children: Vec<BoundingBox> = Vec::with_capacity(BVH_NODE_CHILDREN);
+
+    let part_size = (end - start) / BVH_NODE_CHILDREN;
+    for i in 0..BVH_NODE_CHILDREN {
+        let child_start = start + i * part_size;
+        let child_end = if i < BVH_NODE_CHILDREN - 1 {
+            child_start + part_size
+        } else {
+            end
+        };
+
+        children.push(make_bvh(vertices, indices, child_start, child_end));
+    }
+
+    BoundingBox {
+        start_index: start,
+        end_index: end,
+        bounds_min,
+        bounds_max,
+        children,
     }
 }

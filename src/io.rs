@@ -11,7 +11,7 @@ use crate::{
     scene::{Camera, Film, RenderSettings, Scene},
 };
 use clap::{Arg, Command};
-use glam::{vec3, UVec3, Vec3};
+use glam::{vec3, Vec3};
 use png::Encoder;
 use serde::Deserialize;
 use serde_json::{from_str, from_value, Map, Value};
@@ -163,15 +163,9 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
                     .map(Vec3::from_array)
                     .collect();
 
-                let indices = mesh_params
-                    .indices
-                    .into_iter()
-                    .map(UVec3::from_array)
-                    .collect();
-
                 objects.push(Box::new(Mesh::new(
                     vertices,
-                    indices,
+                    mesh_params.indices,
                     Vec3::from_array(mesh_params.color),
                 )));
             }
