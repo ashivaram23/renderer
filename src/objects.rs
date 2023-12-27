@@ -1,4 +1,5 @@
 use glam::Vec3;
+use rayon::slice::ParallelSliceMut;
 
 const FLOAT_ERROR: f32 = 0.00001;
 const BVH_NODE_CHILDREN: usize = 4;
@@ -254,7 +255,7 @@ fn make_bvh(
         }
     }
 
-    indices[start..end].sort_by(|a, b| {
+    indices[start..end].par_sort_by(|a, b| {
         let a_average = a
             .iter()
             .map(|i| vertices[*i as usize][best_axis])
