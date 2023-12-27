@@ -4,7 +4,7 @@ mod scene;
 
 use std::{f32::consts::PI, process::exit, time::Instant};
 
-use glam::{Mat4, Vec3};
+use glam::{Quat, Vec3};
 use objects::{Hit, Object, Ray};
 use rand::{thread_rng, Rng};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
@@ -18,9 +18,8 @@ fn random_direction(normal: Vec3) -> Vec3 {
     let z = r * theta.sin();
     let y = (1.0 - x * x - z * z).max(0.0).sqrt();
 
-    let tangent_space_up = Vec3::new(0.0, 1.0, 0.0);
-    let rotation = Mat4::from_axis_angle(((normal + tangent_space_up) / 2.0).normalize(), PI);
-    rotation.transform_vector3(Vec3::new(x, y, z))
+    let rotation = Quat::from_rotation_arc(Vec3::new(0.0, 1.0, 0.0), normal);
+    rotation.mul_vec3(Vec3::new(x, y, z))
 }
 
 fn ray_light(ray: Ray, objects: &[Box<dyn Object + Sync>], environment: Vec3, depth: u32) -> Vec3 {
