@@ -2,13 +2,16 @@ mod io;
 mod objects;
 mod scene;
 
-use std::{f32::consts::PI, process::exit, time::Instant};
+use std::{f32::consts::PI, process::exit, thread, time::Instant};
 
 use glam::{Quat, Vec3};
 use objects::{Hit, Object, Ray};
 use rand::{thread_rng, Rng};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use scene::Scene;
+
+// vecdeque try something else, faster aabb tests, and other insights from profiler + flatten bvh, also try sah + sort floats not as i64! big deal + see if basic parallel is faster than rayon
+// later: area lights etc, uvs and textures and normals smooth shade, materials glass etc,
 
 fn random_direction(normal: Vec3) -> Vec3 {
     let r = thread_rng().gen::<f32>().sqrt();
@@ -59,6 +62,24 @@ fn render(scene: &mut Scene) {
     let samples_per_pixel = scene.render_settings.samples_per_pixel;
     let pixel_width = film.world_width / (film.screen_width as f32);
 
+    // let num_threads = match thread::available_parallelism() {
+    //     Ok(count) => usize::from(count),
+    //     Err(_) => 4,
+    // };
+
+    // let pixel_count = (film.screen_width * film.screen_height) as usize;
+    // let chunks = film
+    //     .pixel_data
+    //     .chunks_mut((pixel_count + num_threads - 1) / num_threads);
+
+    // let ranges: Vec<usize> = (0..pixel_count).collect();
+    // let range_chunks = ranges.chunks((pixel_count + num_threads - 1) / num_threads);
+
+    // for (chunk, range) in chunks.zip(range_chunks) {
+    //     //
+    // }
+
+    // film.pixel_data = (0..film.screen_width * film.screen_height)
     (0..film.screen_width * film.screen_height)
         .into_par_iter()
         .panic_fuse()
@@ -85,6 +106,7 @@ fn render(scene: &mut Scene) {
             color / (samples_per_pixel as f32)
         })
         .collect_into_vec(&mut film.pixel_data);
+    // .collect::<Vec<Vec3>>();
 }
 
 fn main() {
