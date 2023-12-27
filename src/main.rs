@@ -7,10 +7,11 @@ use std::{f32::consts::PI, process::exit, thread, time::Instant};
 use glam::{Quat, Vec3};
 use objects::{Hit, Object, Ray};
 use rand::{thread_rng, Rng};
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
-// vecdeque try something else, faster aabb tests, and other insights from profiler + flatten bvh, also try sah + sort floats not as i64! big deal + see if basic parallel is faster than rayon
+// faster aabb tests and other insights from profiler
+// try bvh surface area heuristic
+// see if basic parallel is faster than rayon
 // later: area lights etc, uvs and textures and normals smooth shade, materials glass etc,
 
 fn random_direction(normal: Vec3) -> Vec3 {
@@ -59,54 +60,47 @@ fn render(scene: &mut Scene) {
     let film = &mut camera.film;
     let objects = &scene.objects;
 
+    let (world_position, world_u, world_v) = (film.world_position, film.world_u, film.world_v);
+    let (environment, max_ray_depth) = (scene.environment, scene.render_settings.max_ray_depth);
+    let (screen_width, screen_height) = (film.screen_width, film.screen_height);
     let samples_per_pixel = scene.render_settings.samples_per_pixel;
-    let pixel_width = film.world_width / (film.screen_width as f32);
+    let world_origin = camera.world_origin;
 
-    // let num_threads = match thread::available_parallelism() {
-    //     Ok(count) => usize::from(count),
-    //     Err(_) => 4,
-    // };
+    let num_threads = match thread::available_parallelism() {
+        Ok(count) => usize::from(count),
+        Err(_) => 4,
+    };
 
-    // let pixel_count = (film.screen_width * film.screen_height) as usize;
-    // let chunks = film
-    //     .pixel_data
-    //     .chunks_mut((pixel_count + num_threads - 1) / num_threads);
+    let pixel_width = film.world_width / (screen_width as f32);
+    let pixel_count = (film.screen_width * film.screen_height) as usize;
+    let chunk_size = (pixel_count + num_threads - 1) / num_threads;
 
-    // let ranges: Vec<usize> = (0..pixel_count).collect();
-    // let range_chunks = ranges.chunks((pixel_count + num_threads - 1) / num_threads);
+    thread::scope(|scope| {
+        for thread_number in 0..num_threads {
+            let range_min = thread_number * chunk_size;
+            let range_max = (range_min + chunk_size).min(pixel_count);
 
-    // for (chunk, range) in chunks.zip(range_chunks) {
-    //     //
-    // }
+            scope.spawn(move || {
+                for pixel in range_min..range_max {
+                    let x = (pixel as u32) % screen_width;
+                    let y = screen_height - 1 - ((pixel as u32) / screen_width);
+                    let mut color = Vec3::splat(0.0);
 
-    // film.pixel_data = (0..film.screen_width * film.screen_height)
-    (0..film.screen_width * film.screen_height)
-        .into_par_iter()
-        .panic_fuse()
-        .map(|i| {
-            let x = i % film.screen_width;
-            let y = film.screen_height - 1 - (i / film.screen_width);
-            let mut color = Vec3::splat(0.0);
+                    for _ in 0..samples_per_pixel {
+                        let u = pixel_width * (thread_rng().gen::<f32>() + (x as f32));
+                        let v = pixel_width * (thread_rng().gen::<f32>() + (y as f32));
 
-            for _ in 0..samples_per_pixel {
-                let u = pixel_width * (thread_rng().gen::<f32>() + (x as f32));
-                let v = pixel_width * (thread_rng().gen::<f32>() + (y as f32));
+                        let film_pos = world_position + u * world_u + v * world_v;
+                        let camera_ray = Ray::new(world_origin, film_pos - world_origin);
 
-                let film_pos = film.world_position + u * film.world_u + v * film.world_v;
-                let camera_ray = Ray::new(camera.world_origin, film_pos - camera.world_origin);
+                        color += ray_light(camera_ray, objects, environment, max_ray_depth);
+                    }
 
-                color += ray_light(
-                    camera_ray,
-                    objects,
-                    scene.environment,
-                    scene.render_settings.max_ray_depth,
-                );
-            }
-
-            color / (samples_per_pixel as f32)
-        })
-        .collect_into_vec(&mut film.pixel_data);
-    // .collect::<Vec<Vec3>>();
+                    // color / (samples_per_pixel as f32)
+                }
+            });
+        }
+    });
 }
 
 fn main() {
