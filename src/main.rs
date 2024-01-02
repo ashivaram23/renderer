@@ -2,7 +2,7 @@ mod io;
 mod objects;
 mod scene;
 
-use std::{f32::consts::PI, process::exit, time::Instant};
+use std::{f32::consts::PI, time::Instant};
 
 use glam::{Quat, Vec3};
 use objects::{Hit, Object, Ray};
@@ -10,11 +10,13 @@ use rand::{thread_rng, Rng};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
-// try progressive multi jitter (pmj or pmjbn, try efficient method) for camera rays, check noise reduction and time increase
+// regular stratified/jitter sampling seems to have no effect on noise, not slower either but restricts spp to square number, do not use
+// try owen scrambled sobol? for camera rays, check noise reduction and time increase
 // try bvh surface area heuristic!
 // later: area lights etc, uvs and textures and normals smooth shade, materials glass etc,
 // remember to eventually comment code well with all methods, details (eg left handed), sources etc
-// pub trait Material with bsdf() -> f32 and random_direction_pdf() -> (Vec3, f32) returning direction and pdf
+// pub trait Material with bsdf() -> Vec3 and random_direction_pdf() -> (Vec3, f32) returning direction and pdf
+// or with light_and_direction() -> (Vec3, Vec3) for light multiplier all in one and new direction
 
 fn random_direction(normal: Vec3) -> Vec3 {
     let r = thread_rng().gen::<f32>().sqrt();
@@ -34,7 +36,6 @@ fn ray_light(ray: Ray, objects: &[Box<dyn Object + Sync>], environment: Vec3, de
 
     for _ in 0..depth {
         let mut best_hit: Option<Hit> = None;
-
         for object in objects {
             let Some(hit) = object.intersect(&next_ray) else {
                 continue;
@@ -63,32 +64,25 @@ fn render(scene: &mut Scene) {
     let objects = &scene.objects;
 
     let (screen_width, screen_height) = (film.screen_width, film.screen_height);
-    let (world_position, world_u, world_v) = (film.world_position, film.world_u, film.world_v);
-    let (environment, max_ray_depth) = (scene.environment, scene.render_settings.max_ray_depth);
-
-    let samples_per_pixel = scene.render_settings.samples_per_pixel;
-    let world_origin = camera.world_origin;
-
     let pixel_width = film.world_width / (screen_width as f32);
-    let pixel_count = (film.screen_width * film.screen_height) as usize;
 
-    (0..pixel_count)
+    (0..film.screen_width * film.screen_height)
         .into_par_iter()
         .map(|pixel| {
-            let x = (pixel as u32) % screen_width;
-            let y = screen_height - 1 - ((pixel as u32) / screen_width);
+            let x = pixel % screen_width;
+            let y = screen_height - 1 - (pixel / screen_width);
             let mut color = Vec3::splat(0.0);
 
-            for _ in 0..samples_per_pixel {
+            for _ in 0..scene.samples_per_pixel {
                 let u = pixel_width * (thread_rng().gen::<f32>() + (x as f32));
                 let v = pixel_width * (thread_rng().gen::<f32>() + (y as f32));
 
-                let film_pos = world_position + u * world_u + v * world_v;
-                let camera_ray = Ray::new(world_origin, film_pos - world_origin);
-                color += ray_light(camera_ray, objects, environment, max_ray_depth);
+                let film_pos = film.world_position + u * film.world_u + v * film.world_v;
+                let camera_ray = Ray::new(camera.world_origin, film_pos - camera.world_origin);
+                color += ray_light(camera_ray, objects, scene.environment, scene.max_ray_depth);
             }
 
-            color / (samples_per_pixel as f32)
+            color / (scene.samples_per_pixel as f32)
         })
         .collect_into_vec(&mut film.pixel_data);
 }
@@ -99,14 +93,14 @@ fn main() {
         Ok(scene) => scene,
         Err(error) => {
             println!("Error reading scene file: {}", error);
-            exit(0);
+            return;
         }
     };
 
     println!(
         "Rendering scene with {} objects, {} samples per pixel",
         scene.objects.len(),
-        scene.render_settings.samples_per_pixel
+        scene.samples_per_pixel
     );
 
     let start_time = Instant::now();

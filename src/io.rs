@@ -8,10 +8,10 @@ use std::{
 
 use crate::{
     objects::{Mesh, Object, Sphere, Triangle},
-    scene::{Camera, Film, RenderSettings, Scene},
+    scene::{Camera, Film, Scene},
 };
 use clap::{Arg, Command};
-use glam::{vec3, Vec3};
+use glam::Vec3;
 use png::Encoder;
 use serde::Deserialize;
 use serde_json::{from_str, from_value, Map, Value};
@@ -19,6 +19,7 @@ use serde_json::{from_str, from_value, Map, Value};
 #[derive(Deserialize, Debug)]
 struct SceneParams {
     camera: Value,
+    settings: Value,
     objects: Map<String, Value>,
 }
 
@@ -28,6 +29,14 @@ struct CameraParams {
     origin: [f32; 3],
     look_at: [f32; 3],
     up: [f32; 3],
+    field_of_view: f32,
+}
+
+#[derive(Deserialize, Debug)]
+struct SettingsParams {
+    environment: [f32; 3],
+    samples_per_pixel: u32,
+    max_ray_depth: u32,
 }
 
 #[derive(Deserialize, Debug)]
@@ -78,111 +87,141 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
         });
     };
 
-    let Ok(camera_params) = from_value::<CameraParams>(scene_params.camera) else {
+    let camera = match process_camera(scene_params.camera) {
+        Ok(camera) => camera,
+        Err(error) => return Err(error),
+    };
+
+    let Ok(settings) = from_value::<SettingsParams>(scene_params.settings) else {
         return Err(SceneParseError {
-            message: "Camera parameters aren't correctly formatted".to_string(),
+            message: "Scene settings aren't correctly formatted".to_string(),
         });
     };
 
-    let camera = Camera::new(
-        camera_params.film_dimensions[0],
-        camera_params.film_dimensions[1],
-        Vec3::from_array(camera_params.origin),
-        Vec3::from_array(camera_params.look_at),
-        Vec3::from_array(camera_params.up),
-        1.0,
-    );
-
     let mut objects: Vec<Box<dyn Object + Sync>> = Vec::new();
-    for (name, object) in scene_params.objects.iter_mut() {
-        let Some(object_map) = object.as_object_mut() else {
-            return Err(SceneParseError {
-                message: format!("{} isn't a valid scene object", name),
-            });
+    for (name, object_value) in scene_params.objects.iter_mut() {
+        let object = match process_object(name, object_value) {
+            Ok(object) => object,
+            Err(error) => return Err(error),
         };
 
-        let Some((_, object_type)) = object_map.remove_entry("type") else {
-            return Err(SceneParseError {
-                message: format!("Object {} doesn't have type field", name),
-            });
-        };
-
-        match object_type.as_str() {
-            Some("sphere") => {
-                let Ok(sphere_params) = from_value::<SphereParams>(object.clone()) else {
-                    return Err(SceneParseError {
-                        message: format!("Sphere object {} has invalid parameters", name),
-                    });
-                };
-
-                if sphere_params.radius < 0.0 {
-                    return Err(SceneParseError {
-                        message: format!("Sphere object {} has negative radius", name),
-                    });
-                }
-
-                objects.push(Box::new(Sphere::new(
-                    Vec3::from_array(sphere_params.center),
-                    sphere_params.radius,
-                    Vec3::from_array(sphere_params.color),
-                )));
-            }
-            Some("triangle") => {
-                let Ok(triangle_params) = from_value::<TriangleParams>(object.clone()) else {
-                    return Err(SceneParseError {
-                        message: format!("Triangle object {} has invalid parameters", name),
-                    });
-                };
-
-                objects.push(Box::new(Triangle::new(
-                    Vec3::from_array(triangle_params.point1),
-                    Vec3::from_array(triangle_params.point2),
-                    Vec3::from_array(triangle_params.point3),
-                    Vec3::from_array(triangle_params.color),
-                )));
-            }
-            Some("mesh") => {
-                let Ok(mesh_params) = from_value::<MeshParams>(object.clone()) else {
-                    return Err(SceneParseError {
-                        message: format!("Mesh object {} has invalid parameters", name),
-                    });
-                };
-
-                for triangle in &mesh_params.indices {
-                    let highest_index = triangle[0].max(triangle[1]).max(triangle[2]) as usize;
-                    if highest_index >= mesh_params.vertices.len() {
-                        return Err(SceneParseError {
-                            message: format!("Mesh object {} has indices out of bounds", name),
-                        });
-                    }
-                }
-
-                let vertices = mesh_params
-                    .vertices
-                    .into_iter()
-                    .map(Vec3::from_array)
-                    .collect();
-
-                objects.push(Box::new(Mesh::new(
-                    vertices,
-                    mesh_params.indices,
-                    Vec3::from_array(mesh_params.color),
-                )));
-            }
-            _ => {
-                return Err(SceneParseError {
-                    message: format!("Object {} has invalid type", name),
-                });
-            }
-        }
+        objects.push(object);
     }
 
     Ok(Scene {
         camera,
         objects,
-        environment: vec3(0.6, 0.8, 1.0),
-        render_settings: RenderSettings::default(),
+        environment: Vec3::from_array(settings.environment),
+        samples_per_pixel: settings.samples_per_pixel,
+        max_ray_depth: settings.max_ray_depth,
     })
+}
+
+fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
+    let Ok(camera_params) = from_value::<CameraParams>(camera_value) else {
+        return Err(SceneParseError {
+            message: "Camera parameters aren't correctly formatted".to_string(),
+        });
+    };
+
+    if camera_params.field_of_view <= 0.0 || camera_params.field_of_view >= 180.0 {
+        return Err(SceneParseError {
+            message: "Camera field of view must be between 0 and 180 degrees".to_string(),
+        });
+    }
+
+    Ok(Camera::new(
+        camera_params.film_dimensions[0],
+        camera_params.film_dimensions[1],
+        Vec3::from_array(camera_params.origin),
+        Vec3::from_array(camera_params.look_at),
+        Vec3::from_array(camera_params.up),
+        camera_params.field_of_view,
+    ))
+}
+
+fn process_object(
+    name: &str,
+    object_value: &mut Value,
+) -> Result<Box<dyn Object + Sync>, SceneParseError> {
+    let Some(object_map) = object_value.as_object_mut() else {
+        return Err(SceneParseError {
+            message: format!("{} isn't a valid scene object", name),
+        });
+    };
+
+    let Some((_, object_type)) = object_map.remove_entry("type") else {
+        return Err(SceneParseError {
+            message: format!("Object {} doesn't have type field", name),
+        });
+    };
+
+    match object_type.as_str() {
+        Some("sphere") => {
+            let Ok(sphere_params) = from_value::<SphereParams>(object_value.clone()) else {
+                return Err(SceneParseError {
+                    message: format!("Sphere object {} has invalid parameters", name),
+                });
+            };
+
+            if sphere_params.radius < 0.0 {
+                return Err(SceneParseError {
+                    message: format!("Sphere object {} has negative radius", name),
+                });
+            }
+
+            Ok(Box::new(Sphere::new(
+                Vec3::from_array(sphere_params.center),
+                sphere_params.radius,
+                Vec3::from_array(sphere_params.color),
+            )))
+        }
+        Some("triangle") => {
+            let Ok(triangle_params) = from_value::<TriangleParams>(object_value.clone()) else {
+                return Err(SceneParseError {
+                    message: format!("Triangle object {} has invalid parameters", name),
+                });
+            };
+
+            Ok(Box::new(Triangle::new(
+                Vec3::from_array(triangle_params.point1),
+                Vec3::from_array(triangle_params.point2),
+                Vec3::from_array(triangle_params.point3),
+                Vec3::from_array(triangle_params.color),
+            )))
+        }
+        Some("mesh") => {
+            let Ok(mesh_params) = from_value::<MeshParams>(object_value.clone()) else {
+                return Err(SceneParseError {
+                    message: format!("Mesh object {} has invalid parameters", name),
+                });
+            };
+
+            for triangle in &mesh_params.indices {
+                let highest_index = triangle[0].max(triangle[1]).max(triangle[2]) as usize;
+                if highest_index >= mesh_params.vertices.len() {
+                    return Err(SceneParseError {
+                        message: format!("Mesh object {} has indices out of bounds", name),
+                    });
+                }
+            }
+
+            let vertices = mesh_params
+                .vertices
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect();
+
+            Ok(Box::new(Mesh::new(
+                vertices,
+                mesh_params.indices,
+                Vec3::from_array(mesh_params.color),
+            )))
+        }
+        _ => Err(SceneParseError {
+            message: format!("Object {} has invalid type", name),
+        }),
+    }
 }
 
 pub fn read_args() -> Option<(String, String)> {

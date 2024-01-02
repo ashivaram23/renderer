@@ -2,11 +2,6 @@ use glam::Vec3;
 
 use crate::objects::Object;
 
-pub struct RenderSettings {
-    pub samples_per_pixel: u32,
-    pub max_ray_depth: u32,
-}
-
 pub struct Film {
     pub screen_width: u32,
     pub screen_height: u32,
@@ -27,16 +22,8 @@ pub struct Scene {
     pub camera: Camera,
     pub objects: Vec<Box<dyn Object + Sync>>,
     pub environment: Vec3,
-    pub render_settings: RenderSettings,
-}
-
-impl RenderSettings {
-    pub fn default() -> Self {
-        RenderSettings {
-            samples_per_pixel: 8,
-            max_ray_depth: 8,
-        }
-    }
+    pub samples_per_pixel: u32,
+    pub max_ray_depth: u32,
 }
 
 impl Camera {
@@ -46,10 +33,11 @@ impl Camera {
         origin: Vec3,
         look_at: Vec3,
         up: Vec3,
-        focal_length: f32,
+        field_of_view: f32,
     ) -> Self {
         let world_width = 2.0;
         let world_height = world_width * (screen_height as f32) / (screen_width as f32);
+        let focal_length = (field_of_view / 2.0).to_radians().tan().recip();
 
         let world_forwards = (look_at - origin).normalize();
         let world_left = world_forwards.cross(up).normalize();
