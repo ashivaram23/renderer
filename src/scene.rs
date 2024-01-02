@@ -20,7 +20,7 @@ pub struct Camera {
 
 pub struct Scene {
     pub camera: Camera,
-    pub objects: Vec<Box<dyn Object + Sync>>,
+    pub objects: Vec<Box<dyn Object>>,
     pub environment: Vec3,
     pub samples_per_pixel: u32,
     pub max_ray_depth: u32,

@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    objects::{Mesh, Object, Sphere, Triangle},
+    objects::{DiffuseMaterial, Material, Mesh, Object, Sphere, Triangle},
     scene::{Camera, Film, Scene},
 };
 use clap::{Arg, Command};
@@ -43,7 +43,7 @@ struct SettingsParams {
 struct SphereParams {
     center: [f32; 3],
     radius: f32,
-    color: [f32; 3],
+    material: Value,
 }
 
 #[derive(Deserialize, Debug)]
@@ -51,14 +51,19 @@ struct TriangleParams {
     point1: [f32; 3],
     point2: [f32; 3],
     point3: [f32; 3],
-    color: [f32; 3],
+    material: Value,
 }
 
 #[derive(Deserialize, Debug)]
 struct MeshParams {
     vertices: Vec<[f32; 3]>,
     indices: Vec<[u32; 3]>,
-    color: [f32; 3],
+    material: Value,
+}
+
+#[derive(Deserialize, Debug)]
+struct DiffuseParams {
+    reflectance: [f32; 3],
 }
 
 #[derive(Debug)]
@@ -98,7 +103,7 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
         });
     };
 
-    let mut objects: Vec<Box<dyn Object + Sync>> = Vec::new();
+    let mut objects: Vec<Box<dyn Object>> = Vec::new();
     for (name, object_value) in scene_params.objects.iter_mut() {
         let object = match process_object(name, object_value) {
             Ok(object) => object,
@@ -143,7 +148,7 @@ fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
 fn process_object(
     name: &str,
     object_value: &mut Value,
-) -> Result<Box<dyn Object + Sync>, SceneParseError> {
+) -> Result<Box<dyn Object>, SceneParseError> {
     let Some(object_map) = object_value.as_object_mut() else {
         return Err(SceneParseError {
             message: format!("{} isn't a valid scene object", name),
@@ -158,7 +163,7 @@ fn process_object(
 
     match object_type.as_str() {
         Some("sphere") => {
-            let Ok(sphere_params) = from_value::<SphereParams>(object_value.clone()) else {
+            let Ok(mut sphere_params) = from_value::<SphereParams>(object_value.clone()) else {
                 return Err(SceneParseError {
                     message: format!("Sphere object {} has invalid parameters", name),
                 });
@@ -170,16 +175,28 @@ fn process_object(
                 });
             }
 
+            let Some(material) = process_material(&mut sphere_params.material) else {
+                return Err(SceneParseError {
+                    message: format!("Sphere object {} has invalid material", name),
+                });
+            };
+
             Ok(Box::new(Sphere::new(
                 Vec3::from_array(sphere_params.center),
                 sphere_params.radius,
-                Vec3::from_array(sphere_params.color),
+                material,
             )))
         }
         Some("triangle") => {
-            let Ok(triangle_params) = from_value::<TriangleParams>(object_value.clone()) else {
+            let Ok(mut triangle_params) = from_value::<TriangleParams>(object_value.clone()) else {
                 return Err(SceneParseError {
                     message: format!("Triangle object {} has invalid parameters", name),
+                });
+            };
+
+            let Some(material) = process_material(&mut triangle_params.material) else {
+                return Err(SceneParseError {
+                    message: format!("Triangle object {} has invalid material", name),
                 });
             };
 
@@ -187,11 +204,11 @@ fn process_object(
                 Vec3::from_array(triangle_params.point1),
                 Vec3::from_array(triangle_params.point2),
                 Vec3::from_array(triangle_params.point3),
-                Vec3::from_array(triangle_params.color),
+                material,
             )))
         }
         Some("mesh") => {
-            let Ok(mesh_params) = from_value::<MeshParams>(object_value.clone()) else {
+            let Ok(mut mesh_params) = from_value::<MeshParams>(object_value.clone()) else {
                 return Err(SceneParseError {
                     message: format!("Mesh object {} has invalid parameters", name),
                 });
@@ -206,21 +223,46 @@ fn process_object(
                 }
             }
 
+            let Some(material) = process_material(&mut mesh_params.material) else {
+                return Err(SceneParseError {
+                    message: format!("Mesh object {} has invalid material", name),
+                });
+            };
+
             let vertices = mesh_params
                 .vertices
                 .into_iter()
                 .map(Vec3::from_array)
                 .collect();
 
-            Ok(Box::new(Mesh::new(
-                vertices,
-                mesh_params.indices,
-                Vec3::from_array(mesh_params.color),
-            )))
+            Ok(Box::new(Mesh::new(vertices, mesh_params.indices, material)))
         }
         _ => Err(SceneParseError {
             message: format!("Object {} has invalid type", name),
         }),
+    }
+}
+
+fn process_material(material_value: &mut Value) -> Option<Box<dyn Material>> {
+    let Some(material_map) = material_value.as_object_mut() else {
+        return None;
+    };
+
+    let Some((_, material_type)) = material_map.remove_entry("type") else {
+        return None;
+    };
+
+    match material_type.as_str() {
+        Some("diffuse") => {
+            let Ok(diffuse_params) = from_value::<DiffuseParams>(material_value.clone()) else {
+                return None;
+            };
+
+            Some(Box::new(DiffuseMaterial::new(Vec3::from_array(
+                diffuse_params.reflectance,
+            ))))
+        }
+        _ => None,
     }
 }
 
