@@ -15,7 +15,7 @@ bunny_scene = {}
 bunny_scene["camera"] = {
     "film_dimensions": [1920, 1080], 
     "origin": [0, 0.7, -3],
-    "look_at": [0, 0, 5.701],
+    "look_at": [0, 0, 2.701],
     "up": [0, 1, 0],
     "field_of_view": 45
     }
