@@ -179,11 +179,12 @@ impl Mesh {
 impl Object for Mesh {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         let mut best_distance_normal: Option<(f32, Vec3)> = None;
+        let ray_direction_recip = ray.direction.recip();
 
         let mut i = 0;
         while i < self.bounds.len() {
-            let near = (self.bounds[i].bounds_min - ray.origin) / ray.direction;
-            let far = (self.bounds[i].bounds_max - ray.origin) / ray.direction;
+            let near = (self.bounds[i].bounds_min - ray.origin) * ray_direction_recip;
+            let far = (self.bounds[i].bounds_max - ray.origin) * ray_direction_recip;
 
             let min_distance = near.min(far).max_element().max(FLOAT_ERROR);
             let max_distance = far.max(near).min_element().min(f32::INFINITY);
@@ -231,14 +232,13 @@ fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, V
     let side1 = p2 - p1;
     let side2 = p3 - p1;
 
-    let normal = side2.cross(side1);
     let ray_cross_side2 = ray.direction.cross(side2);
     let denominator = side1.dot(ray_cross_side2);
     if denominator.abs() < FLOAT_ERROR {
         return None;
     }
 
-    let fraction = 1.0 / denominator;
+    let fraction = denominator.recip();
     let p1_to_origin = ray.origin - p1;
     let u = fraction * p1_to_origin.dot(ray_cross_side2);
     if u < 0.0 {
@@ -248,11 +248,12 @@ fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, V
     let p1_to_origin_cross_side1 = p1_to_origin.cross(side1);
     let v = fraction * ray.direction.dot(p1_to_origin_cross_side1);
     let hit_distance = fraction * side2.dot(p1_to_origin_cross_side1);
+    let normal = side2.cross(side1).normalize();
 
     if v < 0.0 || u + v > 1.0 || hit_distance < FLOAT_ERROR {
         None
     } else {
-        Some((hit_distance, normal.normalize()))
+        Some((hit_distance, normal))
     }
 }
 
