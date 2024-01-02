@@ -4,7 +4,7 @@ use glam::{Quat, Vec3};
 use rand::{thread_rng, Rng};
 use rayon::slice::ParallelSliceMut;
 
-const FLOAT_ERROR: f32 = 0.00001;
+const FLOAT_ERROR: f32 = 0.000001;
 const BVH_NODE_CHILDREN: usize = 4;
 const BVH_LEAF_MAX: usize = 12;
 
