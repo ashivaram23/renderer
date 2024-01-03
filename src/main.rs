@@ -10,11 +10,16 @@ use rand::{thread_rng, Rng};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
-// regular stratified/jitter sampling seems to have no effect on noise, not slower either but restricts spp to square number, do not use
+// replace temporary MirrorMaterial with something actually typical pbr with specular, roughness, etc
+// (textures for material parameters would be very interesting but a last priority)
+// new TexturedMesh type for where specify normals and uv coordinates in the scene file (export obj accordingly), and bool for smooth shade?
+
 // try owen scrambled sobol? for camera rays, check noise reduction and time increase
 // try bvh surface area heuristic!
 // later: area lights etc, uvs and textures and normals smooth shade, materials glass etc,
 // remember to eventually comment code well with all methods, details (eg left handed), sources etc
+// make input reading better (not too slow) now that millions of tris, and make sure you wont overflow stack when build bvh (currently recursive)
+// eventually make another bvh over objects, to accomodate more objects (currently not a priority though)
 
 fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u32) -> Vec3 {
     let mut light = Vec3::splat(1.0);
@@ -33,9 +38,12 @@ fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u3
         }
 
         if let Some(hit) = best_hit {
-            let (light_multiplier, new_direction) = hit.material.light_and_direction(hit.normal);
-            light *= light_multiplier;
-            next_ray = Ray::new(next_ray.at(hit.distance), new_direction);
+            let hit_point = next_ray.at(hit.distance);
+            let incoming = (hit_point - next_ray.origin).normalize();
+            let (multiplier, outgoing) = hit.material.light_and_direction(incoming, hit.normal);
+
+            light *= multiplier;
+            next_ray = Ray::new(hit_point, outgoing);
         } else {
             light *= environment;
             break;
@@ -76,8 +84,8 @@ fn render(scene: &mut Scene) {
 
 fn main() {
     let (input, output) = io::read_args().expect("Error reading arguments");
-    let mut scene = match io::read_input(&input) {
-        Ok(scene) => scene,
+    let (mut scene, primitive_count) = match io::read_input(&input) {
+        Ok((scene, count)) => (scene, count),
         Err(error) => {
             println!("Error reading scene file: {}", error);
             return;
@@ -85,8 +93,9 @@ fn main() {
     };
 
     println!(
-        "Rendering scene with {} objects, {} samples per pixel",
+        "Rendering scene with {} objects ({} primitives), {} samples per pixel",
         scene.objects.len(),
+        primitive_count,
         scene.samples_per_pixel
     );
 

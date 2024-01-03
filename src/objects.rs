@@ -13,7 +13,7 @@ pub trait Object: Sync {
 }
 
 pub trait Material: Sync {
-    fn light_and_direction(&self, normal: Vec3) -> (Vec3, Vec3);
+    fn light_and_direction(&self, incoming: Vec3, normal: Vec3) -> (Vec3, Vec3);
 }
 
 pub struct Ray {
@@ -28,6 +28,10 @@ pub struct Hit<'a> {
 }
 
 pub struct DiffuseMaterial {
+    reflectance: Vec3,
+}
+
+pub struct MirrorMaterial {
     reflectance: Vec3,
 }
 
@@ -79,7 +83,7 @@ impl DiffuseMaterial {
 }
 
 impl Material for DiffuseMaterial {
-    fn light_and_direction(&self, normal: Vec3) -> (Vec3, Vec3) {
+    fn light_and_direction(&self, _incoming: Vec3, normal: Vec3) -> (Vec3, Vec3) {
         let r = thread_rng().gen::<f32>().sqrt();
         let theta = 2.0 * PI * thread_rng().gen::<f32>();
 
@@ -88,9 +92,21 @@ impl Material for DiffuseMaterial {
         let y = (1.0 - x * x - z * z).max(0.0).sqrt();
 
         let rotation = Quat::from_rotation_arc(Vec3::new(0.0, 1.0, 0.0), normal);
-        let new_direction = rotation.mul_vec3(Vec3::new(x, y, z));
+        let outgoing = rotation.mul_vec3(Vec3::new(x, y, z));
+        (self.reflectance, outgoing)
+    }
+}
 
-        (self.reflectance, new_direction)
+impl MirrorMaterial {
+    pub fn new(reflectance: Vec3) -> Self {
+        MirrorMaterial { reflectance }
+    }
+}
+
+impl Material for MirrorMaterial {
+    fn light_and_direction(&self, incoming: Vec3, normal: Vec3) -> (Vec3, Vec3) {
+        let outgoing = incoming - 2.0 * normal * incoming.dot(normal);
+        (self.reflectance, outgoing)
     }
 }
 

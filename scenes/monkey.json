@@ -9,7 +9,7 @@
 
     "settings": {
         "environment": [0.6, 0.8, 1.0],
-        "samples_per_pixel": 8,
+        "samples_per_pixel": 16,
         "max_ray_depth": 8
     },
 
@@ -56,7 +56,7 @@
             "vertices": [[-10, 0, -10], [10, 0, -10], [10, 0, 10], [-10, 0, 10]],
             "indices": [[0, 1, 2], [0, 2, 3]],
             "material": {
-                "type": "diffuse",
+                "type": "mirror",
                 "reflectance": [0.3, 0.3, 0.3]
             }
         },

@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    objects::{DiffuseMaterial, Material, Mesh, Object, Sphere, Triangle},
+    objects::{DiffuseMaterial, Material, Mesh, MirrorMaterial, Object, Sphere, Triangle},
     scene::{Camera, Film, Scene},
 };
 use clap::{Arg, Command};
@@ -79,7 +79,7 @@ impl Display for SceneParseError {
 
 impl Error for SceneParseError {}
 
-pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
+pub fn read_input(filename: &str) -> Result<(Scene, u32), SceneParseError> {
     let Ok(scene_json) = fs::read_to_string(Path::new(filename)) else {
         return Err(SceneParseError {
             message: format!("Couldn't open file at {}", filename),
@@ -103,23 +103,28 @@ pub fn read_input(filename: &str) -> Result<Scene, SceneParseError> {
         });
     };
 
+    let mut primitive_count = 0;
     let mut objects: Vec<Box<dyn Object>> = Vec::new();
     for (name, object_value) in scene_params.objects.iter_mut() {
-        let object = match process_object(name, object_value) {
-            Ok(object) => object,
+        let (object, count) = match process_object(name, object_value) {
+            Ok((object, count)) => (object, count),
             Err(error) => return Err(error),
         };
 
+        primitive_count += count;
         objects.push(object);
     }
 
-    Ok(Scene {
-        camera,
-        objects,
-        environment: Vec3::from_array(settings.environment),
-        samples_per_pixel: settings.samples_per_pixel,
-        max_ray_depth: settings.max_ray_depth,
-    })
+    Ok((
+        Scene {
+            camera,
+            objects,
+            environment: Vec3::from_array(settings.environment),
+            samples_per_pixel: settings.samples_per_pixel,
+            max_ray_depth: settings.max_ray_depth,
+        },
+        primitive_count,
+    ))
 }
 
 fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
@@ -148,7 +153,7 @@ fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
 fn process_object(
     name: &str,
     object_value: &mut Value,
-) -> Result<Box<dyn Object>, SceneParseError> {
+) -> Result<(Box<dyn Object>, u32), SceneParseError> {
     let Some(object_map) = object_value.as_object_mut() else {
         return Err(SceneParseError {
             message: format!("{} isn't a valid scene object", name),
@@ -181,11 +186,14 @@ fn process_object(
                 });
             };
 
-            Ok(Box::new(Sphere::new(
-                Vec3::from_array(sphere_params.center),
-                sphere_params.radius,
-                material,
-            )))
+            Ok((
+                Box::new(Sphere::new(
+                    Vec3::from_array(sphere_params.center),
+                    sphere_params.radius,
+                    material,
+                )),
+                1,
+            ))
         }
         Some("triangle") => {
             let Ok(mut triangle_params) = from_value::<TriangleParams>(object_value.clone()) else {
@@ -200,12 +208,15 @@ fn process_object(
                 });
             };
 
-            Ok(Box::new(Triangle::new(
-                Vec3::from_array(triangle_params.point1),
-                Vec3::from_array(triangle_params.point2),
-                Vec3::from_array(triangle_params.point3),
-                material,
-            )))
+            Ok((
+                Box::new(Triangle::new(
+                    Vec3::from_array(triangle_params.point1),
+                    Vec3::from_array(triangle_params.point2),
+                    Vec3::from_array(triangle_params.point3),
+                    material,
+                )),
+                1,
+            ))
         }
         Some("mesh") => {
             let Ok(mut mesh_params) = from_value::<MeshParams>(object_value.clone()) else {
@@ -235,7 +246,12 @@ fn process_object(
                 .map(Vec3::from_array)
                 .collect();
 
-            Ok(Box::new(Mesh::new(vertices, mesh_params.indices, material)))
+            let triangle_count = mesh_params.indices.len() as u32;
+
+            Ok((
+                Box::new(Mesh::new(vertices, mesh_params.indices, material)),
+                triangle_count,
+            ))
         }
         _ => Err(SceneParseError {
             message: format!("Object {} has invalid type", name),
@@ -259,6 +275,15 @@ fn process_material(material_value: &mut Value) -> Option<Box<dyn Material>> {
             };
 
             Some(Box::new(DiffuseMaterial::new(Vec3::from_array(
+                diffuse_params.reflectance,
+            ))))
+        }
+        Some("mirror") => {
+            let Ok(diffuse_params) = from_value::<DiffuseParams>(material_value.clone()) else {
+                return None;
+            };
+
+            Some(Box::new(MirrorMaterial::new(Vec3::from_array(
                 diffuse_params.reflectance,
             ))))
         }
