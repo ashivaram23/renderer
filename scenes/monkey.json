@@ -56,7 +56,7 @@
             "vertices": [[-10, 0, -10], [10, 0, -10], [10, 0, 10], [-10, 0, 10]],
             "indices": [[0, 1, 2], [0, 2, 3]],
             "material": {
-                "type": "mirror",
+                "type": "diffuse",
                 "reflectance": [0.3, 0.3, 0.3]
             }
         },

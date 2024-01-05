@@ -2,11 +2,14 @@ use std::f32::consts::PI;
 
 use glam::{Quat, Vec3};
 use rand::{thread_rng, Rng};
-use rayon::slice::ParallelSliceMut;
+use rayon::{
+    iter::{IndexedParallelIterator, IntoParallelIterator},
+    slice::ParallelSliceMut,
+};
 
 const FLOAT_ERROR: f32 = 0.000001;
-const BVH_NODE_CHILDREN: usize = 4;
 const BVH_LEAF_MAX: usize = 12;
+const BVH_NUM_SPLITS: usize = 20;
 
 pub trait Object: Sync {
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
@@ -25,6 +28,12 @@ pub struct Hit<'a> {
     pub distance: f32,
     pub normal: Vec3,
     pub material: &'a dyn Material,
+}
+
+#[derive(Clone, Copy)]
+pub struct Bounds {
+    pub min: Vec3,
+    pub max: Vec3,
 }
 
 pub struct DiffuseMaterial {
@@ -51,15 +60,14 @@ pub struct Triangle {
 pub struct Mesh {
     vertices: Vec<Vec3>,
     indices: Vec<[u32; 3]>,
-    bounds: Vec<BoundingBox>,
+    bvh: Vec<BoundingBox>,
     material: Box<dyn Material>,
 }
 
 struct BoundingBox {
     start_index: usize,
     end_index: usize,
-    bounds_min: Vec3,
-    bounds_max: Vec3,
+    bounds: Bounds,
     descendant_count: usize,
 }
 
@@ -73,6 +81,29 @@ impl Ray {
 
     pub fn at(&self, distance: f32) -> Vec3 {
         self.origin + distance * self.direction
+    }
+}
+
+impl Bounds {
+    fn add_bounds(&mut self, other: &Bounds) {
+        self.min = self.min.min(other.min);
+        self.max = self.max.max(other.max);
+    }
+
+    fn expand(&mut self, addition: Vec3) {
+        self.min -= addition;
+        self.max += addition;
+    }
+
+    fn size(&self) -> Vec3 {
+        self.max - self.min
+    }
+
+    fn union(&self, other: &Bounds) -> Self {
+        Bounds {
+            min: self.min.min(other.min),
+            max: self.max.max(other.max),
+        }
     }
 }
 
@@ -177,16 +208,27 @@ impl Object for Triangle {
 impl Mesh {
     pub fn new(
         vertices: Vec<Vec3>,
-        mut indices: Vec<[u32; 3]>,
+        mut indices_and_bounds: Vec<([u32; 3], Bounds)>,
         material: Box<dyn Material>,
     ) -> Self {
-        let length = indices.len();
-        let bounds = make_bvh(&vertices, &mut indices, 0, length);
+        let mut full_bounds = indices_and_bounds[0].1;
+        for triangle in indices_and_bounds.iter() {
+            full_bounds.add_bounds(&triangle.1);
+        }
+
+        let length = indices_and_bounds.len();
+        let bvh = make_bvh(&mut indices_and_bounds, full_bounds, 0, length);
+
+        let mut indices: Vec<[u32; 3]> = Vec::with_capacity(length);
+        let mut bounds: Vec<Bounds> = Vec::with_capacity(length);
+        indices_and_bounds
+            .into_par_iter()
+            .unzip_into_vecs(&mut indices, &mut bounds);
 
         Mesh {
             vertices,
             indices,
-            bounds,
+            bvh,
             material,
         }
     }
@@ -198,23 +240,23 @@ impl Object for Mesh {
         let ray_direction_recip = ray.direction.recip();
 
         let mut i = 0;
-        while i < self.bounds.len() {
-            let near = (self.bounds[i].bounds_min - ray.origin) * ray_direction_recip;
-            let far = (self.bounds[i].bounds_max - ray.origin) * ray_direction_recip;
+        while i < self.bvh.len() {
+            let near = (self.bvh[i].bounds.min - ray.origin) * ray_direction_recip;
+            let far = (self.bvh[i].bounds.max - ray.origin) * ray_direction_recip;
 
             let min_distance = near.min(far).max_element().max(FLOAT_ERROR);
             let max_distance = far.max(near).min_element().min(f32::INFINITY);
             if min_distance >= max_distance {
-                i += self.bounds[i].descendant_count + 1;
+                i += self.bvh[i].descendant_count + 1;
                 continue;
             }
 
-            if self.bounds[i].descendant_count > 0 {
+            if self.bvh[i].descendant_count > 0 {
                 i += 1;
                 continue;
             }
 
-            let triangles = &self.indices[self.bounds[i].start_index..self.bounds[i].end_index];
+            let triangles = &self.indices[self.bvh[i].start_index..self.bvh[i].end_index];
             for triangle in triangles {
                 let p1 = self.vertices[triangle[0] as usize];
                 let p2 = self.vertices[triangle[1] as usize];
@@ -274,70 +316,110 @@ fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, V
 }
 
 fn make_bvh(
-    vertices: &[Vec3],
-    indices: &mut [[u32; 3]],
+    indices_and_bounds: &mut [([u32; 3], Bounds)],
+    mut full_bounds: Bounds,
     start: usize,
     end: usize,
 ) -> Vec<BoundingBox> {
-    let mut bounds_min = vertices[indices[start][0] as usize];
-    let mut bounds_max = vertices[indices[start][0] as usize];
-
-    for triangle in indices[start..end].iter() {
-        for index in triangle {
-            let vertex = vertices[*index as usize];
-            bounds_min = vertex.min(bounds_min);
-            bounds_max = vertex.max(bounds_max);
-        }
-    }
-
-    bounds_min -= Vec3::splat(FLOAT_ERROR);
-    bounds_max += Vec3::splat(FLOAT_ERROR);
-
+    full_bounds.expand(Vec3::splat(FLOAT_ERROR));
     let mut bvh_tree = vec![BoundingBox {
         start_index: start,
         end_index: end,
-        bounds_min,
-        bounds_max,
+        bounds: full_bounds,
         descendant_count: 0,
     }];
 
-    if end - start <= BVH_LEAF_MAX {
+    let length = end - start;
+    if length <= BVH_LEAF_MAX {
         return bvh_tree;
     }
 
-    let range = (bounds_max - bounds_min).to_array();
+    let range = full_bounds.size().to_array();
     let mut best_axis = 0;
-    for i in 1..3 {
-        if range[i] > range[best_axis] {
-            best_axis = i;
+    for axis in 1..3 {
+        if range[axis] > range[best_axis] {
+            best_axis = axis;
         }
     }
 
-    indices[start..end].par_sort_by(|a, b| {
-        let a_average = a
-            .iter()
-            .map(|i| vertices[*i as usize][best_axis])
-            .sum::<f32>();
-        let b_average = b
-            .iter()
-            .map(|i| vertices[*i as usize][best_axis])
-            .sum::<f32>();
-        a_average
-            .partial_cmp(&b_average)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    indices_and_bounds[start..end]
+        .par_sort_by(|a, b| a.1.min[best_axis].total_cmp(&b.1.min[best_axis]));
 
-    let part_size = (end - start) / BVH_NODE_CHILDREN;
-    for i in 0..BVH_NODE_CHILDREN {
-        let child_start = start + i * part_size;
-        let child_end = if i < BVH_NODE_CHILDREN - 1 {
-            child_start + part_size
+    let num_chunks = length.min(BVH_NUM_SPLITS + 1);
+    let chunk_size = length / num_chunks;
+
+    let mut chunk_ends: Vec<usize> = vec![0; num_chunks];
+    for chunk in 0..num_chunks {
+        let previous = if chunk == 0 {
+            start
         } else {
-            end
+            chunk_ends[chunk - 1]
         };
 
-        bvh_tree.append(&mut make_bvh(vertices, indices, child_start, child_end));
+        let extra = if chunk < length % num_chunks { 1 } else { 0 };
+        chunk_ends[chunk] = previous + chunk_size + extra;
     }
+
+    let mut bounds_per_chunk: Vec<Bounds> = Vec::with_capacity(num_chunks);
+    for chunk in 0..num_chunks {
+        let chunk_start = if chunk == 0 {
+            start
+        } else {
+            chunk_ends[chunk - 1]
+        };
+
+        let mut chunk_bounds = indices_and_bounds[chunk_start].1;
+        for triangle in &indices_and_bounds[chunk_start..chunk_ends[chunk]] {
+            chunk_bounds.add_bounds(&triangle.1);
+        }
+
+        bounds_per_chunk.push(chunk_bounds);
+    }
+
+    let mut bounds_from_left = vec![bounds_per_chunk[0]; num_chunks];
+    for chunk in 1..num_chunks {
+        bounds_from_left[chunk] = bounds_from_left[chunk - 1].union(&bounds_per_chunk[chunk]);
+    }
+
+    let mut bounds_from_right = vec![bounds_per_chunk[num_chunks - 1]; num_chunks];
+    for chunk in (0..num_chunks - 1).rev() {
+        bounds_from_right[chunk] = bounds_from_right[chunk + 1].union(&bounds_per_chunk[chunk]);
+    }
+
+    let mut best_split = 0;
+    let mut best_cost = f32::INFINITY;
+
+    for chunk in 0..(num_chunks - 1) {
+        let left_count = chunk_ends[chunk] - start;
+        let left_bounds = bounds_from_left[chunk].size();
+        let left_bounds_shifted = Vec3::new(left_bounds.y, left_bounds.z, left_bounds.x);
+        let left_cost = left_bounds.dot(left_bounds_shifted) * left_count as f32;
+
+        let right_bounds = bounds_from_right[chunk + 1].size();
+        let right_bounds_shifted = Vec3::new(right_bounds.y, right_bounds.z, right_bounds.x);
+        let right_cost = right_bounds.dot(right_bounds_shifted) * (length - left_count) as f32;
+
+        if left_cost + right_cost < best_cost {
+            best_split = chunk;
+            best_cost = left_cost + right_cost;
+        }
+    }
+
+    let left_bounds = bounds_from_left[best_split];
+    bvh_tree.append(&mut make_bvh(
+        indices_and_bounds,
+        left_bounds,
+        start,
+        chunk_ends[best_split],
+    ));
+
+    let right_bounds = bounds_from_right[best_split + 1];
+    bvh_tree.append(&mut make_bvh(
+        indices_and_bounds,
+        right_bounds,
+        chunk_ends[best_split],
+        end,
+    ));
 
     bvh_tree[0].descendant_count = bvh_tree.len() - 1;
     bvh_tree

@@ -7,12 +7,13 @@ use std::{
 };
 
 use crate::{
-    objects::{DiffuseMaterial, Material, Mesh, MirrorMaterial, Object, Sphere, Triangle},
+    objects::{Bounds, DiffuseMaterial, Material, Mesh, MirrorMaterial, Object, Sphere, Triangle},
     scene::{Camera, Film, Scene},
 };
 use clap::{Arg, Command};
 use glam::Vec3;
 use png::Encoder;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde_json::{from_str, from_value, Map, Value};
 
@@ -240,16 +241,33 @@ fn process_object(
                 });
             };
 
-            let vertices = mesh_params
+            let vertices: Vec<Vec3> = mesh_params
                 .vertices
-                .into_iter()
+                .into_par_iter()
                 .map(Vec3::from_array)
                 .collect();
 
             let triangle_count = mesh_params.indices.len() as u32;
 
+            let indices_and_bounds: Vec<([u32; 3], Bounds)> = mesh_params
+                .indices
+                .into_par_iter()
+                .map(|point_indices| {
+                    let p1 = vertices[point_indices[0] as usize];
+                    let p2 = vertices[point_indices[1] as usize];
+                    let p3 = vertices[point_indices[2] as usize];
+
+                    let bounds = Bounds {
+                        min: p1.min(p2.min(p3)),
+                        max: p1.max(p2.max(p3)),
+                    };
+
+                    (point_indices, bounds)
+                })
+                .collect();
+
             Ok((
-                Box::new(Mesh::new(vertices, mesh_params.indices, material)),
+                Box::new(Mesh::new(vertices, indices_and_bounds, material)),
                 triangle_count,
             ))
         }
