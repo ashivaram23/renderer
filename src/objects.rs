@@ -212,7 +212,7 @@ impl Mesh {
         material: Box<dyn Material>,
     ) -> Self {
         let mut full_bounds = indices_and_bounds[0].1;
-        for triangle in indices_and_bounds.iter() {
+        for triangle in &indices_and_bounds {
             full_bounds.add_bounds(&triangle.1);
         }
 

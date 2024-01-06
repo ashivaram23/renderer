@@ -2,7 +2,7 @@ use std::{
     error::Error,
     fmt::{Debug, Display},
     fs::{self, File},
-    io::BufWriter,
+    io::{BufRead, BufReader, BufWriter},
     path::Path,
 };
 
@@ -57,8 +57,7 @@ struct TriangleParams {
 
 #[derive(Deserialize, Debug)]
 struct MeshParams {
-    vertices: Vec<[f32; 3]>,
-    indices: Vec<[u32; 3]>,
+    file: String,
     material: Value,
 }
 
@@ -226,31 +225,13 @@ fn process_object(
                 });
             };
 
-            for triangle in &mesh_params.indices {
-                let highest_index = triangle[0].max(triangle[1]).max(triangle[2]) as usize;
-                if highest_index >= mesh_params.vertices.len() {
-                    return Err(SceneParseError {
-                        message: format!("Mesh object {} has indices out of bounds", name),
-                    });
-                }
-            }
-
-            let Some(material) = process_material(&mut mesh_params.material) else {
-                return Err(SceneParseError {
-                    message: format!("Mesh object {} has invalid material", name),
-                });
+            let (vertices, indices) = match read_obj(&mesh_params.file) {
+                Ok((vertices, indices)) => (vertices, indices),
+                Err(error) => return Err(error),
             };
 
-            let vertices: Vec<Vec3> = mesh_params
-                .vertices
-                .into_par_iter()
-                .map(Vec3::from_array)
-                .collect();
-
-            let triangle_count = mesh_params.indices.len() as u32;
-
-            let indices_and_bounds: Vec<([u32; 3], Bounds)> = mesh_params
-                .indices
+            let triangle_count = indices.len() as u32;
+            let indices_and_bounds: Vec<([u32; 3], Bounds)> = indices
                 .into_par_iter()
                 .map(|point_indices| {
                     let p1 = vertices[point_indices[0] as usize];
@@ -265,6 +246,12 @@ fn process_object(
                     (point_indices, bounds)
                 })
                 .collect();
+
+            let Some(material) = process_material(&mut mesh_params.material) else {
+                return Err(SceneParseError {
+                    message: format!("Mesh object {} has invalid material", name),
+                });
+            };
 
             Ok((
                 Box::new(Mesh::new(vertices, indices_and_bounds, material)),
@@ -307,6 +294,71 @@ fn process_material(material_value: &mut Value) -> Option<Box<dyn Material>> {
         }
         _ => None,
     }
+}
+
+fn read_obj(filename: &str) -> Result<(Vec<Vec3>, Vec<[u32; 3]>), SceneParseError> {
+    let Ok(file) = File::open(filename) else {
+        return Err(SceneParseError {
+            message: format!("Couldn't open OBJ file at {}", filename),
+        });
+    };
+
+    let mut vertices: Vec<Vec3> = Vec::new();
+    let mut indices: Vec<[u32; 3]> = Vec::new();
+
+    let invalid_value_error = |i| {
+        Err(SceneParseError {
+            message: format!("OBJ file {} has invalid values at line {}", filename, i + 1),
+        })
+    };
+
+    for (i, line) in BufReader::new(file).lines().flatten().enumerate() {
+        let tokens: Vec<&str> = line.split(' ').collect();
+        if tokens.len() < 4 {
+            continue;
+        }
+
+        match tokens[0] {
+            "v" => {
+                let mut points = Vec3::splat(0.0);
+                for j in 0..3 {
+                    let Ok(value) = tokens[j + 1].parse::<f32>() else {
+                        return invalid_value_error(i);
+                    };
+
+                    points[j] = value;
+                }
+
+                points[0] *= -1.0;
+                vertices.push(points);
+            }
+            "f" => {
+                let mut points = [1; 3];
+                for j in 0..3 {
+                    let value = tokens[j + 1].parse::<u32>();
+                    if value.is_ok() && *value.as_ref().unwrap() >= 1 {
+                        points[j] = value.unwrap() - 1;
+                    } else {
+                        return invalid_value_error(i);
+                    }
+                }
+
+                indices.push(points);
+            }
+            _ => (),
+        }
+    }
+
+    for triangle in &indices {
+        let highest_index = triangle[0].max(triangle[1]).max(triangle[2]) as usize;
+        if highest_index >= vertices.len() {
+            return Err(SceneParseError {
+                message: format!("OBJ file {} contains indices out of bounds", filename),
+            });
+        }
+    }
+
+    Ok((vertices, indices))
 }
 
 pub fn read_args() -> Option<(String, String)> {

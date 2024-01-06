@@ -11,14 +11,12 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
 // Minimal remaining steps:
-// - bypass huge serde_json memory usage problem by just implementing actual obj
-//   loading from filename instead (basic only is okay, ie just verts faces like
-//   current) and finalizing all other scene format things
 // - make the monte carlo sampling stuff actually final with correct structure,
 //   and the camera tonemap stuff etc ie ensure complete and not temporary hack
 // - implement pbr materials and lights
 // - noise reduction sobol sampling etc
 // - cleaned up and commented code, proper structure, ensure neat and efficient
+//   and do more profiling for cpu AND for memory/heap
 // - readme and proper documentation with sources etc, and with good looking
 //   picture samples of interesting scenes (run those on cs machines through ssh
 //   for much better performance), for final presentable product
