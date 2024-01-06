@@ -10,6 +10,31 @@ use rand::{thread_rng, Rng};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
+// Minimal remaining steps:
+// - bypass huge serde_json memory usage problem by just implementing actual obj
+//   loading from filename instead (basic only is okay, ie just verts faces like
+//   current) and finalizing all other scene format things
+// - make the monte carlo sampling stuff actually final with correct structure,
+//   and the camera tonemap stuff etc ie ensure complete and not temporary hack
+// - implement pbr materials and lights
+// - noise reduction sobol sampling etc
+// - cleaned up and commented code, proper structure, ensure neat and efficient
+// - readme and proper documentation with sources etc, and with good looking
+//   picture samples of interesting scenes (run those on cs machines through ssh
+//   for much better performance), for final presentable product
+
+// Other things
+// - textures and texturedmesh type and getting the normals, uv, smooth shading
+//   from obj files etc
+// - some script to quickly make scene file and objs from eg blender scene
+// - environment maps hdris etc
+// - other techniques like multiple importance sampling and russian roulette,
+//   other integrators like bidirectional, metropolis, etc etc
+// - spectral? allowing better caustics, dispersion, glass effects etc things
+// - remaining features like depth of field, etc
+// - volumetric, physical media etc
+// - gpu...
+
 fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u32) -> Vec3 {
     let mut light = Vec3::splat(1.0);
     let mut next_ray = ray;

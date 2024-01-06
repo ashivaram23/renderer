@@ -8,7 +8,7 @@ use rayon::{
 };
 
 const FLOAT_ERROR: f32 = 0.000001;
-const BVH_LEAF_MAX: usize = 12;
+const BVH_LEAF_MAX: usize = 8;
 const BVH_NUM_SPLITS: usize = 20;
 
 pub trait Object: Sync {
@@ -343,7 +343,7 @@ fn make_bvh(
     }
 
     indices_and_bounds[start..end]
-        .par_sort_by(|a, b| a.1.min[best_axis].total_cmp(&b.1.min[best_axis]));
+        .par_sort_unstable_by(|a, b| a.1.min[best_axis].total_cmp(&b.1.min[best_axis]));
 
     let num_chunks = length.min(BVH_NUM_SPLITS + 1);
     let chunk_size = length / num_chunks;
