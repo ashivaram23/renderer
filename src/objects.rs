@@ -7,9 +7,9 @@ use rayon::{
     slice::ParallelSliceMut,
 };
 
-const FLOAT_ERROR: f32 = 0.000001;
-const BVH_LEAF_MAX: usize = 8;
-const BVH_NUM_SPLITS: usize = 20;
+const FLOAT_ERROR: f32 = 1e-6;
+const BVH_LEAF_MAX: usize = 4;
+const BVH_NUM_SPLITS: usize = 40;
 
 pub trait Object: Sync {
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
@@ -27,6 +27,7 @@ pub struct Ray {
 pub struct Hit<'a> {
     pub distance: f32,
     pub normal: Vec3,
+    pub inside: bool,
     pub material: &'a dyn Material,
 }
 
@@ -169,16 +170,23 @@ impl Object for Sphere {
 
         let projection_to_hit = (radius_sq - center_to_projection_sq).sqrt();
         let hit_distance = projection_on_ray - projection_to_hit;
-
         if hit_distance < FLOAT_ERROR {
-            None
-        } else {
-            Some(Hit {
-                distance: hit_distance,
-                normal: (ray.at(hit_distance) - self.center).normalize(),
-                material: &*self.material,
-            })
+            return None;
         }
+
+        let mut inside = false;
+        let mut normal = (ray.at(hit_distance) - self.center).normalize();
+        if ray.direction.dot(normal) > 0.0 {
+            inside = true;
+            normal *= -1.0;
+        }
+
+        Some(Hit {
+            distance: hit_distance - FLOAT_ERROR,
+            normal,
+            inside,
+            material: &*self.material,
+        })
     }
 }
 
@@ -196,10 +204,20 @@ impl Triangle {
 impl Object for Triangle {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         intersect_triangle(ray, self.point1, self.point2, self.point3).map(|(distance, normal)| {
-            Hit {
-                distance,
-                normal,
-                material: &*self.material,
+            if ray.direction.dot(normal) > 0.0 {
+                Hit {
+                    distance: distance - FLOAT_ERROR,
+                    normal: -normal,
+                    inside: true,
+                    material: &*self.material,
+                }
+            } else {
+                Hit {
+                    distance: distance - FLOAT_ERROR,
+                    normal,
+                    inside: false,
+                    material: &*self.material,
+                }
             }
         })
     }
@@ -274,14 +292,24 @@ impl Object for Mesh {
             i += 1;
         }
 
-        if let Some((distance, normal)) = best_distance_normal {
+        let Some((distance, normal)) = best_distance_normal else {
+            return None;
+        };
+
+        if ray.direction.dot(normal) > 0.0 {
             Some(Hit {
-                distance,
-                normal,
+                distance: distance - FLOAT_ERROR,
+                normal: -normal,
+                inside: true,
                 material: &*self.material,
             })
         } else {
-            None
+            Some(Hit {
+                distance: distance - FLOAT_ERROR,
+                normal,
+                inside: false,
+                material: &*self.material,
+            })
         }
     }
 }
