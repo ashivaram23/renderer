@@ -6,7 +6,7 @@ want to put the scene JSON and OBJ files. Command line launching is described at
 docs.blender.org/manual/en/latest/advanced/command_line/launch/index.html.
 
 Use the following arguments:
-blender yourfile.blend --python scene_from_blend.py
+blender yourfile.blend -P scene_from_blend.py
 
 You can also open a .blend file manually, navigate to the Scripting tab, and
 load and run this script.
@@ -27,7 +27,6 @@ def add_vec(a, b):
     return [x + y for (x, y) in zip(a, b)]
 
 
-# TODO fix this, currently doesn't work right
 def multiply_quats(a, b):
     w = a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3]
     x = a[0] * b[1] + a[1] * b[0] - a[2] * b[3] + a[3] * b[2]
@@ -38,17 +37,18 @@ def multiply_quats(a, b):
 
 def rotate_quat(vec, quat):
     inv_quat = [quat[0]] + [-x for x in quat[1:4]]
-    rotated = multiply_quats(quat, multiply_quats([0] + vec, inv_quat))
+    rotated = multiply_quats(inv_quat, multiply_quats([0] + vec, quat))
     return rotated[-3:]
 
 
 scene_dict = {"camera": {}, "settings": {}, "objects": {}}
 scene = bpy.context.scene
 
-origin = xzy_to_xyz(scene.camera.location[:3])
+scene.camera.rotation_mode = "QUATERNION"
 camera_quat = list(scene.camera.rotation_quaternion[:4])
+origin = xzy_to_xyz(scene.camera.location[:3])
 look_at = add_vec(origin, xzy_to_xyz(rotate_quat([0, 0, -1], camera_quat)))
-up = add_vec(origin, xzy_to_xyz(rotate_quat([0, 1, 0], camera_quat)))
+up = xzy_to_xyz(rotate_quat([0, 1, 0], camera_quat))
 
 scene_dict["camera"] = {
     "film_dimensions": [scene.render.resolution_x, scene.render.resolution_y], 
@@ -81,7 +81,7 @@ export_args = {
     }
 
 os.makedirs("objects", exist_ok=True)
-meshes = [obj for obj in bpy.data.objects if obj.type == "MESH"]
+meshes = [m for m in bpy.data.objects if m.type == "MESH" and not m.hide_render]
 for mesh in meshes:
     mesh.select_set(True)
     bpy.ops.wm.obj_export(filepath=f"objects/{mesh.name}.obj", **export_args)

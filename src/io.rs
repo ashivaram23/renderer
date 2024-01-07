@@ -231,6 +231,12 @@ fn process_object(
             };
 
             let triangle_count = indices.len() as u32;
+            if triangle_count == 0 {
+                return Err(SceneParseError {
+                    message: format!("Mesh object {} is empty", name),
+                });
+            }
+
             let indices_and_bounds: Vec<([u32; 3], Bounds)> = indices
                 .into_par_iter()
                 .map(|point_indices| {
