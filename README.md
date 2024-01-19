@@ -2,6 +2,8 @@
 
 This program renders 3D scenes with global illumination using Monte Carlo path tracing.
 
+<!-- Best image here -->
+
 ## Build
 
 [First, install Rust and Cargo if you don't already have them.](https://www.rust-lang.org/learn/get-started)
@@ -57,12 +59,16 @@ This example renders a 1920x1080px image from a camera positioned at (0, 0.7, -3
 
 Each OBJ file should include one object made of triangles only, and will be read with the +z axis pointing forward and the +y axis pointing up. (OBJ files use right-handed coordinates, which will automatically be converted by the renderer.)
 
+You can convert a Blender object to a scene JSON file by running `blender yourfile.blend -P scenes/scene_from_blend.py` (see the comments in scenes/scene_from_blend.py for more information).
+
 See the scenes folder for more examples.
 
 ## Example renders
 
 This section will be updated soon.
+<!-- Update this with images and details, render times, comparisons, etc -->
 
 ## Resources
 
 This section will be updated soon.
+<!-- Sources and more (also remember to comment and neaten code) -->
