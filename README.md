@@ -2,8 +2,6 @@
 
 This program renders 3D scenes with global illumination using Monte Carlo path tracing.
 
-Best image here _____
-
 ## Build
 
 [First, install Rust and Cargo if you don't already have them.](https://www.rust-lang.org/learn/get-started)
@@ -63,8 +61,8 @@ See the scenes folder for more examples.
 
 ## Example renders
 
-Text including pictures and render times, comparisons, etc
+This section will be updated soon.
 
 ## Resources
 
-Text
+This section will be updated soon.
