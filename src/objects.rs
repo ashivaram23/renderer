@@ -27,7 +27,6 @@ pub struct Ray {
 pub struct Hit<'a> {
     pub distance: f32,
     pub normal: Vec3,
-    pub inside: bool,
     pub material: &'a dyn Material,
 }
 
@@ -174,17 +173,14 @@ impl Object for Sphere {
             return None;
         }
 
-        let mut inside = false;
         let mut normal = (ray.at(hit_distance) - self.center).normalize();
         if ray.direction.dot(normal) > 0.0 {
-            inside = true;
             normal *= -1.0;
         }
 
         Some(Hit {
             distance: hit_distance - FLOAT_ERROR,
             normal,
-            inside,
             material: &*self.material,
         })
     }
@@ -203,23 +199,19 @@ impl Triangle {
 
 impl Object for Triangle {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        intersect_triangle(ray, self.point1, self.point2, self.point3).map(|(distance, normal)| {
-            if ray.direction.dot(normal) > 0.0 {
-                Hit {
-                    distance: distance - FLOAT_ERROR,
-                    normal: -normal,
-                    inside: true,
-                    material: &*self.material,
+        intersect_triangle(ray, self.point1, self.point2, self.point3).map(
+            |(distance, mut normal)| {
+                if ray.direction.dot(normal) > 0.0 {
+                    normal *= -1.0;
                 }
-            } else {
+
                 Hit {
                     distance: distance - FLOAT_ERROR,
                     normal,
-                    inside: false,
                     material: &*self.material,
                 }
-            }
-        })
+            },
+        )
     }
 }
 
@@ -292,25 +284,19 @@ impl Object for Mesh {
             i += 1;
         }
 
-        let Some((distance, normal)) = best_distance_normal else {
+        let Some((distance, mut normal)) = best_distance_normal else {
             return None;
         };
 
         if ray.direction.dot(normal) > 0.0 {
-            Some(Hit {
-                distance: distance - FLOAT_ERROR,
-                normal: -normal,
-                inside: true,
-                material: &*self.material,
-            })
-        } else {
-            Some(Hit {
-                distance: distance - FLOAT_ERROR,
-                normal,
-                inside: false,
-                material: &*self.material,
-            })
+            normal *= -1.0;
         }
+
+        Some(Hit {
+            distance: distance - FLOAT_ERROR,
+            normal,
+            material: &*self.material,
+        })
     }
 }
 

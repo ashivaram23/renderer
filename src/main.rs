@@ -11,10 +11,15 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
 // Minimal remaining steps:
-// - make the monte carlo sampling stuff actually final with correct structure,
+// - make the monte carlo sampling accumulate correctly with weights etc and rr,
 //   and the camera tonemap stuff etc ie ensure complete and not temporary hack
 // - implement pbr materials and lights
 // - noise reduction sobol sampling etc
+// - all the intersection precision float etc problems straightened out (incl
+//   maybe give triangle id on hit for intersect (and maybe material) purposes),
+//   clarify how inside hits are supposed to work (including if transmission)
+// - something making performance very very bad at scale with the sponge in
+//   particular, fix up bvh and acceleration structure handling to improve that
 // - cleaned up and commented code, proper structure, ensure neat and efficient
 //   and do more profiling for cpu AND for memory/heap
 // - readme and proper documentation with sources etc, and with good looking
@@ -24,10 +29,9 @@ use scene::Scene;
 // Other things
 // - textures and texturedmesh type and getting the normals, uv, smooth shading
 //   from obj files etc
-// - some script to quickly make scene file and objs from eg blender scene
 // - environment maps hdris etc
-// - other techniques like multiple importance sampling and russian roulette,
-//   other integrators like bidirectional, metropolis, etc etc
+// - other techniques like multiple importance sampling, other integrators like
+//   bidirectional, metropolis, etc etc
 // - spectral? allowing better caustics, dispersion, glass effects etc things
 // - remaining features like depth of field, etc
 // - volumetric, physical media etc
