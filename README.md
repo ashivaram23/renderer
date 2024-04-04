@@ -2,7 +2,8 @@
 
 This program renders 3D scenes with global illumination using Monte Carlo path tracing.
 
-<!-- Best image here -->
+![Stanford dragon](dragon.png)  
+*Scene at `scenes/dragon.json`. 871,416 triangles rendered at 32 samples per pixel in 25.81 s on 2017 MacBook Pro with i7-7700HQ*
 
 ## Build
 
@@ -65,10 +66,20 @@ See the scenes folder for more examples.
 
 ## Example renders
 
-This section will be updated soon.
+![Menger sponge](spongeoutside.png)  
+*`scenes/spongeoutside.json`, 64 samples per pixel*
+
+![Stanford bunny, Utah teapot, and Suzanne monkey](bunnyetc.png)  
+*`scenes/bunnyetc.json`, 64 samples per pixel*
+
 <!-- Update this with images and details, render times, comparisons, etc -->
 
 ## Resources
 
-This section will be updated soon.
+- [Physically Based Rendering: From Theory to Implementation, 4th edition](https://pbr-book.org/4ed/) by Matt Pharr, Wenzel Jakob, and Greg Humphreys. In particular, Chapter 7 on acceleration structure implementation, chapter 8 on sampling, and 13 on light transport theory
+- [Real Time Rendering, 4th edition](https://www.realtimerendering.com/) by Tomas Akenine-Möller, Eric Haines, Naty Hoffman, Angelo Pesce, Michał Iwanicki, and Sébastien Hillaire. The ray-triangle intersection method in this path tracer is from chapter 22.8
+- Fundamentals of Computer Graphics, 5th edition by Steve Marschner and Peter Shirley
+- [Ray Tracing In One Weekend](https://raytracing.github.io/books/RayTracingInOneWeekend.html) by Peter Shirley, Trevor David Black, and Steve Hollasch
+- Source code of [Cycles](https://projects.blender.org/blender/cycles.git), [Mitsuba 3](https://github.com/mitsuba-renderer/mitsuba3), and [LuxCoreRender](https://github.com/LuxCoreRender/LuxCore) for examples of how larger renderers are structured
+
 <!-- Sources and more (also remember to comment and neaten code) -->
