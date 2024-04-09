@@ -31,7 +31,7 @@ Describe a scene with a JSON file in the following format. Positions are based o
 
     "settings": {
         "environment": [0.4, 0.6, 0.9],
-        "samples_per_pixel": 16,
+        "samples_per_pixel": 32,
         "max_ray_depth": 8
     },
 
@@ -56,7 +56,7 @@ Describe a scene with a JSON file in the following format. Positions are based o
 }
 ```
 
-This example renders a 1920x1080px image from a camera positioned at (0, 0.7, -3) and facing towards (0, 0, 2.701) with a field of view of 25 degrees. The sky color is light blue (RGB 0.6, 0.8, 1.0) and the renderer calculates 64 samples per pixel. There are two objects: a blue floor plane mesh from floor.obj and a yellow dragon mesh from dragon.obj.
+This example renders a 1920x1080px image from a camera positioned at (0, 0.7, -3) and facing towards (0, 0, 2.701) with a field of view of 45 degrees. The sky color is light blue (RGB 0.4, 0.6, 0.9) and the renderer calculates 32 samples per pixel. There are two objects: a blue floor plane mesh from floor.obj and a yellow dragon mesh from dragon.obj.
 
 Each OBJ file should include one object made of triangles only, and will be read with the +z axis pointing forward and the +y axis pointing up. (OBJ files use right-handed coordinates, which will automatically be converted by the renderer.)
 
@@ -76,7 +76,7 @@ See the scenes folder for more examples.
 
 ## Resources
 
-- [Physically Based Rendering: From Theory to Implementation, 4th edition](https://pbr-book.org/4ed/) by Matt Pharr, Wenzel Jakob, and Greg Humphreys. In particular, Chapter 7 on acceleration structure implementation, chapter 8 on sampling, and 13 on light transport theory
+- [Physically Based Rendering: From Theory to Implementation, 4th edition](https://pbr-book.org/4ed/) by Matt Pharr, Wenzel Jakob, and Greg Humphreys. In particular, chapter 7 on acceleration structure implementation, chapter 8 on sampling, and chapter 13 on light transport theory
 - [Real Time Rendering, 4th edition](https://www.realtimerendering.com/) by Tomas Akenine-Möller, Eric Haines, Naty Hoffman, Angelo Pesce, Michał Iwanicki, and Sébastien Hillaire. The ray-triangle intersection method in this path tracer is from chapter 22.8
 - Fundamentals of Computer Graphics, 5th edition by Steve Marschner and Peter Shirley
 - [Ray Tracing In One Weekend](https://raytracing.github.io/books/RayTracingInOneWeekend.html) by Peter Shirley, Trevor David Black, and Steve Hollasch
