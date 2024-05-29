@@ -6,17 +6,15 @@
         "up": [0, 1, 0],
         "field_of_view": 45
     },
-
     "settings": {
         "environment": [0.4, 0.6, 0.9],
         "samples_per_pixel": 16,
         "max_ray_depth": 8
     },
-
     "objects": {
         "floor": {
             "type": "mesh",
-            "file": "scenes/objects/floor.obj",
+            "file": "scenes/bunnyetc/objects/floor.obj",
             "material": {
                 "type": "diffuse",
                 "reflectance": [0.5, 0.3, 0.4]
@@ -24,7 +22,7 @@
         },
         "bunny": {
             "type": "mesh",
-            "file": "scenes/objects/bunnyetc-bunny.obj",
+            "file": "scenes/bunnyetc/objects/bunnyetc-bunny.obj",
             "material": {
                 "type": "diffuse",
                 "reflectance": [0.8, 0.3, 0.1]
@@ -32,7 +30,7 @@
         },
         "monkey": {
             "type": "mesh",
-            "file": "scenes/objects/bunnyetc-monkey.obj",
+            "file": "scenes/bunnyetc/objects/bunnyetc-monkey.obj",
             "material": {
                 "type": "diffuse",
                 "reflectance": [0.8, 0.8, 0.8]
@@ -40,7 +38,7 @@
         },
         "teapot": {
             "type": "mesh",
-            "file": "scenes/objects/bunnyetc-teapot.obj",
+            "file": "scenes/bunnyetc/objects/bunnyetc-teapot.obj",
             "material": {
                 "type": "diffuse",
                 "reflectance": [0.35, 0.8, 0.25]

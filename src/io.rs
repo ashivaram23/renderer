@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    objects::{Bounds, DiffuseMaterial, Material, Mesh, MirrorMaterial, Object, Sphere, Triangle},
+    objects::{Bounds, Material, Mesh, Object, Sphere, Triangle},
     scene::{Camera, Film, Scene},
 };
 use clap::{Arg, Command};
@@ -64,6 +64,12 @@ struct MeshParams {
 #[derive(Deserialize, Debug)]
 struct DiffuseParams {
     reflectance: [f32; 3],
+}
+
+#[derive(Deserialize, Debug)]
+struct EmitterParams {
+    radiance: [f32; 3],
+    strength: f32,
 }
 
 #[derive(Debug)]
@@ -270,7 +276,7 @@ fn process_object(
     }
 }
 
-fn process_material(material_value: &mut Value) -> Option<Box<dyn Material>> {
+fn process_material(material_value: &mut Value) -> Option<Material> {
     let Some(material_map) = material_value.as_object_mut() else {
         return None;
     };
@@ -285,18 +291,28 @@ fn process_material(material_value: &mut Value) -> Option<Box<dyn Material>> {
                 return None;
             };
 
-            Some(Box::new(DiffuseMaterial::new(Vec3::from_array(
+            Some(Material::Diffuse(Vec3::from_array(
                 diffuse_params.reflectance,
-            ))))
+            )))
         }
         Some("mirror") => {
             let Ok(diffuse_params) = from_value::<DiffuseParams>(material_value.clone()) else {
                 return None;
             };
 
-            Some(Box::new(MirrorMaterial::new(Vec3::from_array(
+            Some(Material::Mirror(Vec3::from_array(
                 diffuse_params.reflectance,
-            ))))
+            )))
+        }
+        Some("emitter") => {
+            let Ok(emitter_params) = from_value::<EmitterParams>(material_value.clone()) else {
+                return None;
+            };
+
+            Some(Material::Emitter(
+                Vec3::from_array(emitter_params.radiance),
+                emitter_params.strength,
+            ))
         }
         _ => None,
     }

@@ -6,17 +6,15 @@
         "up": [0, 1, 0],
         "field_of_view": 45
     },
-
     "settings": {
         "environment": [0.4, 0.6, 0.9],
         "samples_per_pixel": 16,
         "max_ray_depth": 8
     },
-
     "objects": {
         "floor": {
             "type": "mesh",
-            "file": "scenes/objects/floor.obj",
+            "file": "scenes/dragon/objects/floor.obj",
             "material": {
                 "type": "diffuse",
                 "reflectance": [0.05, 0.39, 0.8]
@@ -24,7 +22,7 @@
         },
         "dragon": {
             "type": "mesh",
-            "file": "scenes/objects/dragon.obj",
+            "file": "scenes/dragon/objects/dragon.obj",
             "material": {
                 "type": "diffuse",
                 "reflectance": [0.8, 0.75, 0.1]

@@ -15,10 +15,6 @@ pub trait Object: Sync {
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
 }
 
-pub trait Material: Sync {
-    fn light_and_direction(&self, incoming: Vec3, normal: Vec3) -> (Vec3, Vec3);
-}
-
 pub struct Ray {
     pub origin: Vec3,
     pub direction: Vec3,
@@ -27,7 +23,7 @@ pub struct Ray {
 pub struct Hit<'a> {
     pub distance: f32,
     pub normal: Vec3,
-    pub material: &'a dyn Material,
+    pub material: &'a Material,
 }
 
 #[derive(Clone, Copy)]
@@ -36,32 +32,30 @@ pub struct Bounds {
     pub max: Vec3,
 }
 
-pub struct DiffuseMaterial {
-    reflectance: Vec3,
-}
-
-pub struct MirrorMaterial {
-    reflectance: Vec3,
+pub enum Material {
+    Diffuse(Vec3),
+    Mirror(Vec3),
+    Emitter(Vec3, f32),
 }
 
 pub struct Sphere {
     center: Vec3,
     radius: f32,
-    material: Box<dyn Material>,
+    material: Material,
 }
 
 pub struct Triangle {
     point1: Vec3,
     point2: Vec3,
     point3: Vec3,
-    material: Box<dyn Material>,
+    material: Material,
 }
 
 pub struct Mesh {
     vertices: Vec<Vec3>,
     indices: Vec<[u32; 3]>,
     bvh: Vec<BoundingBox>,
-    material: Box<dyn Material>,
+    material: Material,
 }
 
 struct BoundingBox {
@@ -107,42 +101,31 @@ impl Bounds {
     }
 }
 
-impl DiffuseMaterial {
-    pub fn new(reflectance: Vec3) -> Self {
-        DiffuseMaterial { reflectance }
-    }
-}
+impl Material {
+    pub fn light_and_direction(&self, incoming: Vec3, normal: Vec3) -> (Vec3, Vec3) {
+        match self {
+            Material::Diffuse(reflectance) => {
+                let r = thread_rng().gen::<f32>().sqrt();
+                let theta = 2.0 * PI * thread_rng().gen::<f32>();
 
-impl Material for DiffuseMaterial {
-    fn light_and_direction(&self, _incoming: Vec3, normal: Vec3) -> (Vec3, Vec3) {
-        let r = thread_rng().gen::<f32>().sqrt();
-        let theta = 2.0 * PI * thread_rng().gen::<f32>();
+                let x = r * theta.cos();
+                let z = r * theta.sin();
+                let y = (1.0 - x * x - z * z).max(0.0).sqrt();
 
-        let x = r * theta.cos();
-        let z = r * theta.sin();
-        let y = (1.0 - x * x - z * z).max(0.0).sqrt();
-
-        let rotation = Quat::from_rotation_arc(Vec3::new(0.0, 1.0, 0.0), normal);
-        let outgoing = rotation.mul_vec3(Vec3::new(x, y, z));
-        (self.reflectance, outgoing)
-    }
-}
-
-impl MirrorMaterial {
-    pub fn new(reflectance: Vec3) -> Self {
-        MirrorMaterial { reflectance }
-    }
-}
-
-impl Material for MirrorMaterial {
-    fn light_and_direction(&self, incoming: Vec3, normal: Vec3) -> (Vec3, Vec3) {
-        let outgoing = incoming - 2.0 * normal * incoming.dot(normal);
-        (self.reflectance, outgoing)
+                let rotation = Quat::from_rotation_arc(Vec3::new(0.0, 1.0, 0.0), normal);
+                let outgoing = rotation.mul_vec3(Vec3::new(x, y, z));
+                (*reflectance, outgoing)
+            }
+            Material::Mirror(reflectance) => {
+                (*reflectance, incoming - 2.0 * normal * incoming.dot(normal))
+            }
+            Material::Emitter(radiance, strength) => (*radiance * *strength, Vec3::splat(0.0)),
+        }
     }
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f32, material: Box<dyn Material>) -> Self {
+    pub fn new(center: Vec3, radius: f32, material: Material) -> Self {
         Sphere {
             center,
             radius,
@@ -181,13 +164,13 @@ impl Object for Sphere {
         Some(Hit {
             distance: hit_distance - FLOAT_ERROR,
             normal,
-            material: &*self.material,
+            material: &self.material,
         })
     }
 }
 
 impl Triangle {
-    pub fn new(point1: Vec3, point2: Vec3, point3: Vec3, material: Box<dyn Material>) -> Self {
+    pub fn new(point1: Vec3, point2: Vec3, point3: Vec3, material: Material) -> Self {
         Triangle {
             point1,
             point2,
@@ -208,7 +191,7 @@ impl Object for Triangle {
                 Hit {
                     distance: distance - FLOAT_ERROR,
                     normal,
-                    material: &*self.material,
+                    material: &self.material,
                 }
             },
         )
@@ -219,7 +202,7 @@ impl Mesh {
     pub fn new(
         vertices: Vec<Vec3>,
         mut indices_and_bounds: Vec<([u32; 3], Bounds)>,
-        material: Box<dyn Material>,
+        material: Material,
     ) -> Self {
         let mut full_bounds = indices_and_bounds[0].1;
         for triangle in &indices_and_bounds {
@@ -295,7 +278,7 @@ impl Object for Mesh {
         Some(Hit {
             distance: distance - FLOAT_ERROR,
             normal,
-            material: &*self.material,
+            material: &self.material,
         })
     }
 }
