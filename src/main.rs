@@ -11,31 +11,58 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use scene::Scene;
 
 // Minimal remaining steps:
-// - make the monte carlo sampling accumulate correctly with weights etc and rr,
-//   and the camera tonemap stuff etc ie ensure complete and not temporary hack
-// - implement pbr materials and lights
-// - noise reduction sobol sampling etc
+// - change to path integral form and accumulate correctly with mis, nee, rr
+// - any camera tonemap stuff etc ie ensure complete and not temporary hack
+// - implement lights and pbr materials (first just basic diffuse, glass,
+//   specular, etc, but eventually consider microfacet ggx, fresnel, multiple
+//   scattering energy conservation, anisotropy, cloth, subsurface scattering,
+//   dielectric and conductor etc, etc, and principled bsdf)
+// - noise reduction sobol sampling owen etc, randomized quasi monte carlo
 // - all the intersection precision float etc problems straightened out (incl
 //   maybe give triangle id on hit for intersect (and maybe material) purposes),
 //   clarify how inside hits are supposed to work (including if transmission)
 // - something making performance very very bad at scale with the sponge in
 //   particular, fix up bvh and acceleration structure handling to improve that
+// - consider threads instead of rayon, and benchmark etc, optimize performance,
+//   all the things about tiling and blocks and so on
+// - revisit bvh implementation and other things like memory layout and cache
+//   utilization to ensure as fast as possible
 // - cleaned up and commented code, proper structure, ensure neat and efficient
 //   and do more profiling for cpu AND for memory/heap
 // - readme and proper documentation with sources etc, and with good looking
-//   picture samples of interesting scenes (run those on cs machines through ssh
-//   for much better performance), for final presentable product
+//   picture samples of interesting scenes including complex ones from online
+//   like classroom scene, for final presentable product
 
 // Other things
 // - textures and texturedmesh type and getting the normals, uv, smooth shading
 //   from obj files etc
 // - environment maps hdris etc
-// - other techniques like multiple importance sampling, other integrators like
-//   bidirectional, metropolis, etc etc
+// - other integrators like bidirectional, metropolis (and variations),
+//   hybrid path metropolis, something using path guiding, etc
 // - spectral? allowing better caustics, dispersion, glass effects etc things
 // - remaining features like depth of field, etc
-// - volumetric, physical media etc
-// - gpu...
+// - volumetric, physical media etc (in separate integrator)
+// - animations through scene files having multiple frames and obj displacements
+// - the ris/reservoir/restir things
+// - displaying output on screen, potentially live
+// - denoising step, if have access to libraries (optix, oidn) for those
+// - gpu with compute shaders and wavefront thing (could also implement vk rt
+//   shaders that use rt cores, or cuda/optix, on supported, but can't test
+//   those), thus also allowing for a real time option with actual interactive
+//   screen and controls, and temporal accumulation etc
+// - ui and controls like screenshots, etc
+
+// Pared down final set of features
+// - cpu only, single frame, no volumetrics
+// - path tracing with mis nee rr
+// - qmc sampling
+// - simple material model like with diffuse specular, metallic roughness
+//   controls (and glass dielectric)
+// - area lights only
+// - depth of field
+// - optional: albedo textures, normal maps, hdri
+// - optional: better pbr model eg principled bsdf
+// - optional special: gris / restir pt
 
 fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u32) -> Vec3 {
     let mut light = Vec3::splat(1.0);
