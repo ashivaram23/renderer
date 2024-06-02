@@ -7,12 +7,15 @@ use rayon::{
     slice::ParallelSliceMut,
 };
 
-const FLOAT_ERROR: f32 = 1e-6;
+pub const FLOAT_ERROR: f32 = 1e-6;
 const BVH_LEAF_MAX: usize = 4;
 const BVH_NUM_SPLITS: usize = 40;
 
 pub trait Object: Sync {
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
+    fn material(&self) -> Material;
+    fn sample_surface(&self, origin_point: Vec3) -> (Hit, f32);
+    fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32;
 }
 
 pub struct Ray {
@@ -20,10 +23,12 @@ pub struct Ray {
     pub direction: Vec3,
 }
 
-pub struct Hit<'a> {
+pub struct Hit {
+    pub id: u32,
+    pub triangle_id: u32,
+    pub point: Vec3,
     pub distance: f32,
     pub normal: Vec3,
-    pub material: &'a Material,
 }
 
 #[derive(Clone, Copy)]
@@ -32,6 +37,7 @@ pub struct Bounds {
     pub max: Vec3,
 }
 
+#[derive(Clone, Copy)]
 pub enum Material {
     Diffuse(Vec3),
     Mirror(Vec3),
@@ -39,12 +45,14 @@ pub enum Material {
 }
 
 pub struct Sphere {
+    id: u32,
     center: Vec3,
     radius: f32,
     material: Material,
 }
 
 pub struct Triangle {
+    id: u32,
     point1: Vec3,
     point2: Vec3,
     point3: Vec3,
@@ -52,17 +60,18 @@ pub struct Triangle {
 }
 
 pub struct Mesh {
+    id: u32,
     vertices: Vec<Vec3>,
     indices: Vec<[u32; 3]>,
     bvh: Vec<BoundingBox>,
     material: Material,
 }
 
-struct BoundingBox {
-    start_index: usize,
-    end_index: usize,
+pub struct BoundingBox {
+    start_index: u32,
+    end_index: u32,
     bounds: Bounds,
-    descendant_count: usize,
+    descendant_count: u32,
 }
 
 impl Ray {
@@ -102,31 +111,50 @@ impl Bounds {
 }
 
 impl Material {
-    pub fn light_and_direction(&self, incoming: Vec3, normal: Vec3) -> (Vec3, Vec3) {
+    pub fn bsdf_multiplier(&self, incident: &Vec3, _exitant: &Vec3, normal: &Vec3) -> Vec3 {
         match self {
-            Material::Diffuse(reflectance) => {
-                let r = thread_rng().gen::<f32>().sqrt();
+            Material::Diffuse(reflectance) => *reflectance * incident.dot(*normal) / PI,
+            Material::Mirror(_) => todo!(),
+            Material::Emitter(radiance, strength) => {
+                *radiance * *strength * incident.dot(*normal) / PI
+            }
+        }
+    }
+
+    pub fn emitted(&self, _exitant: &Vec3) -> Vec3 {
+        match self {
+            Material::Emitter(radiance, strength) => *radiance * *strength,
+            _ => Vec3::ZERO,
+        }
+    }
+
+    pub fn sample_direction(&self, normal: &Vec3) -> (Vec3, f32) {
+        match self {
+            Material::Diffuse(_) | Material::Emitter(_, _) => {
+                let r_sq = thread_rng().gen::<f32>();
+                let r = r_sq.sqrt();
                 let theta = 2.0 * PI * thread_rng().gen::<f32>();
 
-                let x = r * theta.cos();
-                let z = r * theta.sin();
-                let y = (1.0 - x * x - z * z).max(0.0).sqrt();
+                let direction = Vec3::new(r * theta.cos(), (1.0 - r_sq).sqrt(), r * theta.sin());
+                let rotated = Quat::from_rotation_arc(Vec3::Y, *normal).mul_vec3(direction);
+                (rotated, direction.dot(Vec3::Y) / PI)
+            }
+            Material::Mirror(_) => todo!(),
+        }
+    }
 
-                let rotation = Quat::from_rotation_arc(Vec3::new(0.0, 1.0, 0.0), normal);
-                let outgoing = rotation.mul_vec3(Vec3::new(x, y, z));
-                (*reflectance, outgoing)
-            }
-            Material::Mirror(reflectance) => {
-                (*reflectance, incoming - 2.0 * normal * incoming.dot(normal))
-            }
-            Material::Emitter(radiance, strength) => (*radiance * *strength, Vec3::splat(0.0)),
+    pub fn direction_pdf(&self, direction: &Vec3, normal: &Vec3) -> f32 {
+        match self {
+            Material::Diffuse(_) | Material::Emitter(_, _) => direction.dot(*normal) / PI,
+            Material::Mirror(_) => todo!(),
         }
     }
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f32, material: Material) -> Self {
+    pub fn new(id: usize, center: Vec3, radius: f32, material: Material) -> Self {
         Sphere {
+            id: id as u32,
             center,
             radius,
             material,
@@ -156,22 +184,39 @@ impl Object for Sphere {
             return None;
         }
 
-        let mut normal = (ray.at(hit_distance) - self.center).normalize();
+        let hit_location = ray.at(hit_distance - FLOAT_ERROR);
+        let mut normal = (hit_location - self.center).normalize();
         if ray.direction.dot(normal) > 0.0 {
             normal *= -1.0;
         }
 
         Some(Hit {
+            id: self.id,
+            triangle_id: 0,
+            point: hit_location,
             distance: hit_distance - FLOAT_ERROR,
             normal,
-            material: &self.material,
         })
+    }
+
+    fn material(&self) -> Material {
+        self.material
+    }
+
+    fn sample_surface(&self, origin_point: Vec3) -> (Hit, f32) {
+        // later, try to only sample smaller potentially visible part, and update surface_pdf too
+        todo!()
+    }
+
+    fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32 {
+        todo!()
     }
 }
 
 impl Triangle {
-    pub fn new(point1: Vec3, point2: Vec3, point3: Vec3, material: Material) -> Self {
+    pub fn new(id: usize, point1: Vec3, point2: Vec3, point3: Vec3, material: Material) -> Self {
         Triangle {
+            id: id as u32,
             point1,
             point2,
             point3,
@@ -189,17 +234,32 @@ impl Object for Triangle {
                 }
 
                 Hit {
+                    id: self.id,
+                    triangle_id: 0,
+                    point: ray.at(distance - FLOAT_ERROR),
                     distance: distance - FLOAT_ERROR,
                     normal,
-                    material: &self.material,
                 }
             },
         )
+    }
+
+    fn material(&self) -> Material {
+        self.material
+    }
+
+    fn sample_surface(&self, point: Vec3) -> (Hit, f32) {
+        todo!()
+    }
+
+    fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32 {
+        todo!()
     }
 }
 
 impl Mesh {
     pub fn new(
+        id: usize,
         vertices: Vec<Vec3>,
         mut indices_and_bounds: Vec<([u32; 3], Bounds)>,
         material: Material,
@@ -219,6 +279,7 @@ impl Mesh {
             .unzip_into_vecs(&mut indices, &mut bounds);
 
         Mesh {
+            id: id as u32,
             vertices,
             indices,
             bvh,
@@ -230,6 +291,7 @@ impl Mesh {
 impl Object for Mesh {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         let mut best_distance_normal: Option<(f32, Vec3)> = None;
+        let mut best_triangle_id = 0;
         let ray_direction_recip = ray.direction.recip();
 
         let mut i = 0;
@@ -240,7 +302,7 @@ impl Object for Mesh {
             let min_distance = near.min(far).max_element().max(FLOAT_ERROR);
             let max_distance = far.max(near).min_element().min(f32::INFINITY);
             if min_distance >= max_distance {
-                i += self.bvh[i].descendant_count + 1;
+                i += (self.bvh[i].descendant_count + 1) as usize;
                 continue;
             }
 
@@ -249,8 +311,9 @@ impl Object for Mesh {
                 continue;
             }
 
-            let triangles = &self.indices[self.bvh[i].start_index..self.bvh[i].end_index];
-            for triangle in triangles {
+            let triangles =
+                &self.indices[self.bvh[i].start_index as usize..self.bvh[i].end_index as usize];
+            for (triangle_id, triangle) in triangles.iter().enumerate() {
                 let p1 = self.vertices[triangle[0] as usize];
                 let p2 = self.vertices[triangle[1] as usize];
                 let p3 = self.vertices[triangle[2] as usize];
@@ -261,25 +324,85 @@ impl Object for Mesh {
 
                 if best_distance_normal.is_none() || distance < best_distance_normal.unwrap().0 {
                     best_distance_normal = Some((distance, normal));
+                    best_triangle_id = triangle_id;
                 }
             }
 
             i += 1;
         }
 
-        let Some((distance, mut normal)) = best_distance_normal else {
-            return None;
-        };
-
+        let (distance, mut normal) = best_distance_normal?;
         if ray.direction.dot(normal) > 0.0 {
             normal *= -1.0;
         }
 
         Some(Hit {
-            distance: distance - FLOAT_ERROR,
+            id: self.id,
+            triangle_id: best_triangle_id as u32,
+            point: ray.at(distance - FLOAT_ERROR),
+            distance: distance - FLOAT_ERROR, // should this just be distance? does it matter? check in eg teapot, etc
             normal,
-            material: &self.material,
         })
+    }
+
+    fn material(&self) -> Material {
+        self.material
+    }
+
+    fn sample_surface(&self, point: Vec3) -> (Hit, f32) {
+        // todo: later consider trying to sample smaller subset
+        let chosen_triangle_id = thread_rng().gen_range(0..self.indices.len());
+
+        let u = 1.0 - thread_rng().gen::<f32>().sqrt();
+        let v = thread_rng().gen::<f32>() * (1.0 - u);
+
+        let triangle = self.indices[chosen_triangle_id];
+        let p1 = self.vertices[triangle[0] as usize];
+        let p2 = self.vertices[triangle[1] as usize];
+        let p3 = self.vertices[triangle[2] as usize];
+
+        let triangle_point = u * p1 + v * p2 + (1.0 - u - v) * p3;
+        let side2_cross_side1 = (p3 - p1).cross(p2 - p1);
+        let mut normal = side2_cross_side1.normalize();
+        if (point - triangle_point).dot(normal) < 0.0 {
+            normal *= -1.0;
+        }
+
+        let surface_pdf = 2.0 / side2_cross_side1.length(); // todo: fix area calculation, currently off
+        let distance = triangle_point.distance(point);
+        let area_to_solid_angle =
+            distance.powi(2) / normal.dot((point - triangle_point).normalize());
+
+        (
+            Hit {
+                id: self.id,
+                triangle_id: chosen_triangle_id as u32,
+                point: triangle_point,
+                distance,
+                normal,
+            },
+            area_to_solid_angle / 1.365, // todo: replace hardcoded for cornell with correct area calculation
+        )
+    }
+
+    fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32 {
+        let triangle = self.indices[triangle_id as usize];
+        let p1 = self.vertices[triangle[0] as usize];
+        let p2 = self.vertices[triangle[1] as usize];
+        let p3 = self.vertices[triangle[2] as usize];
+
+        let side2_cross_side1 = (p3 - p1).cross(p2 - p1);
+        let mut normal = side2_cross_side1.normalize();
+        if (triangle_point - origin_point).dot(normal) < 0.0 {
+            normal *= -1.0;
+        }
+
+        let surface_pdf = 2.0 / side2_cross_side1.length(); // fix area calculations
+        let distance = triangle_point.distance(origin_point);
+        let area_to_solid_angle =
+            distance.powi(2) / normal.dot((origin_point - triangle_point).normalize());
+
+        area_to_solid_angle / 1.365 // replace hardcoded
     }
 }
 
@@ -320,8 +443,8 @@ fn make_bvh(
 ) -> Vec<BoundingBox> {
     full_bounds.expand(Vec3::splat(FLOAT_ERROR));
     let mut bvh_tree = vec![BoundingBox {
-        start_index: start,
-        end_index: end,
+        start_index: start as u32,
+        end_index: end as u32,
         bounds: full_bounds,
         descendant_count: 0,
     }];
@@ -418,6 +541,15 @@ fn make_bvh(
         end,
     ));
 
-    bvh_tree[0].descendant_count = bvh_tree.len() - 1;
+    bvh_tree[0].descendant_count = (bvh_tree.len() - 1) as u32;
     bvh_tree
 }
+
+// fn make_objects_bvh(
+//     object_bounds: &mut [([u32; 3], Bounds)],
+//     mut full_bounds: Bounds,
+//     start: usize,
+//     end: usize,
+// ) -> Vec<BoundingBox> {
+//     todo!()
+// }

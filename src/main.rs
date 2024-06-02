@@ -1,110 +1,59 @@
 mod io;
 mod objects;
+mod path_trace;
 mod scene;
 
 use std::time::Instant;
 
 use glam::Vec3;
-use objects::{Hit, Material, Object, Ray};
+use objects::Ray;
 use rand::{thread_rng, Rng};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use scene::Scene;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use scene::RenderTask;
 
-// Remaining steps:
-// - correct path tracing based on path integral form with mis, nee, rr
-// - area lights (shapes with emitter material)
-// - materials: diffuse, simple pbr model like metallic+roughness, transmission
-//   and benchmark if switch from dyn Material to enum is actually better
-// - smooth shading and normals from obj file
-// - qmc sampling
-// - depth of field support
-// - any changes to camera, tonemapping, and final exports
-// - straighten out all the intersection precision float etc problems
-// - fix performance inconsistency with sponge/dragon etc, revisit and fix bvh
-//   and memory layout and data structure etc to fix that
-// - general optimizing and benchmarking, profiling for cpu and memory, revisit
-//   threads vs rayon, general strategy like tiling
-// - modify sample scenes and set up more, including complex ones, and organize
-//   in scenes folder, to help set up routine for comparisons and benchmarking
-// - cleaned up and commented code, proper structure, ensure neat and efficient
-// - readme and proper documentation with sources and picture samples
-//
-// Extra/optional:
-// - optional: albedo textures, normal maps, hdri
-// - optional: better pbr model eg principled bsdf
-// - optional extra: gris / restir pt
-
-fn ray_light(ray: Ray, objects: &[Box<dyn Object>], environment: Vec3, depth: u32) -> Vec3 {
-    let mut light = Vec3::splat(0.0);
-    let mut throughput = Vec3::splat(1.0);
-    let mut next_ray = ray;
-
-    for _ in 0..depth {
-        let mut best_hit: Option<Hit> = None;
-        for object in objects {
-            let Some(hit) = object.intersect(&next_ray) else {
-                continue;
-            };
-
-            if best_hit.is_none() || hit.distance < best_hit.as_ref().unwrap().distance {
-                best_hit = Some(hit)
-            }
-        }
-
-        if let Some(hit) = best_hit {
-            if let Material::Emitter(radiance, strength) = hit.material {
-                light += throughput * *radiance * *strength;
-                break;
-            };
-
-            let hit_point = next_ray.at(hit.distance);
-            let incoming = (hit_point - next_ray.origin).normalize();
-            let (multiplier, outgoing) = hit.material.light_and_direction(incoming, hit.normal);
-
-            throughput *= multiplier;
-            next_ray = Ray::new(hit_point, outgoing);
-        } else {
-            light += throughput * environment;
-            break;
-        }
-    }
-
-    light
-}
-
-fn render(scene: &mut Scene) {
-    let camera = &mut scene.camera;
+// Renders a scene by calculating the color of each pixel in the camera's image plane
+fn render(task: &mut RenderTask) {
+    let camera = &mut task.camera;
     let film = &mut camera.film;
-    let objects = &scene.objects;
+    let scene = &task.scene;
 
     let (screen_width, screen_height) = (film.screen_width, film.screen_height);
     let pixel_width = film.world_width / (screen_width as f32);
 
-    film.pixel_data = (0..screen_width * screen_height)
+    // Loops over each pixel
+    (0..screen_width * screen_height)
         .into_par_iter()
         .map(|pixel| {
             let x = pixel % screen_width;
             let y = screen_height - 1 - (pixel / screen_width);
-            let mut color = Vec3::splat(0.0);
+            let mut color = Vec3::ZERO;
 
-            for _ in 0..scene.samples_per_pixel {
+            // Repeats radiance sampling process for multiple samples
+            for _ in 0..task.samples_per_pixel {
+                // Gets random offsets within pixel square
                 let u = pixel_width * (thread_rng().gen::<f32>() + (x as f32));
                 let v = pixel_width * (thread_rng().gen::<f32>() + (y as f32));
 
-                let film_pos = film.world_position + u * film.world_u + v * film.world_v;
+                // Finds camera ray (going from camera origin through pixel point)
+                let film_pos = film.world_position + (u * film.world_u) + (v * film.world_v);
                 let camera_ray = Ray::new(camera.world_origin, film_pos - camera.world_origin);
-                color += ray_light(camera_ray, objects, scene.environment, scene.max_ray_depth);
+
+                // Adds estimated radiance to the pixel color, clamped to reduce fireflies
+                color += path_trace::radiance(camera_ray, scene, task.max_ray_depth)
+                    .clamp(Vec3::ZERO, Vec3::ONE);
             }
 
-            color / (scene.samples_per_pixel as f32)
+            // Divides accumulated radiance by sample count
+            color / (task.samples_per_pixel as f32)
         })
-        .collect();
+        .collect_into_vec(&mut film.pixel_data);
 }
 
+// Reads arguments, processes the scene file, renders the scene, and saves an image
 fn main() {
     let (input, output) = io::read_args().expect("Error reading arguments");
-    let (mut scene, primitive_count) = match io::read_input(&input) {
-        Ok((scene, count)) => (scene, count),
+    let (mut render_task, primitive_count) = match io::read_input(&input) {
+        Ok(result) => result,
         Err(error) => {
             println!("Error reading scene file: {}", error);
             return;
@@ -113,16 +62,16 @@ fn main() {
 
     println!(
         "Rendering scene with {} objects ({} primitives), {} samples per pixel",
-        scene.objects.len(),
+        render_task.scene.objects.len(),
         primitive_count,
-        scene.samples_per_pixel
+        render_task.samples_per_pixel
     );
 
     let start_time = Instant::now();
-    render(&mut scene);
+    render(&mut render_task);
     println!("Rendered in {:.2?}", start_time.elapsed());
 
-    let film = &scene.camera.film;
+    let film = &render_task.camera.film;
     let (width, height) = (film.screen_width, film.screen_height);
     io::save_to_png(film, &output).expect("Error writing to png file");
     println!("Saved {}x{} image to {}", width, height, output)

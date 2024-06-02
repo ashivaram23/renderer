@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     objects::{Bounds, Material, Mesh, Object, Sphere, Triangle},
-    scene::{Camera, Film, Scene},
+    scene::{Camera, Film, RenderTask, Scene},
 };
 use clap::{Arg, Command};
 use glam::Vec3;
@@ -16,6 +16,15 @@ use png::Encoder;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde_json::{from_str, from_value, Map, Value};
+
+//
+// todo:
+// in anticipation for cases with lots of objects (which is why added a scene-wide bvh of objects):
+// - modify scene file format to reuse obj files (but still going to make a new mesh for each one of course) and allow displacements
+// - and modify scene_from_blend.py to handle this
+// - and modify read_obj to handle this, and the other methods to cache an obj file if it's one of the reused ones and to read from that cache instead of reopening the obj file each time
+// and everything else
+//
 
 #[derive(Deserialize, Debug)]
 struct SceneParams {
@@ -85,7 +94,7 @@ impl Display for SceneParseError {
 
 impl Error for SceneParseError {}
 
-pub fn read_input(filename: &str) -> Result<(Scene, u32), SceneParseError> {
+pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> {
     let Ok(scene_json) = fs::read_to_string(Path::new(filename)) else {
         return Err(SceneParseError {
             message: format!("Couldn't open file at {}", filename),
@@ -111,8 +120,8 @@ pub fn read_input(filename: &str) -> Result<(Scene, u32), SceneParseError> {
 
     let mut primitive_count = 0;
     let mut objects: Vec<Box<dyn Object>> = Vec::new();
-    for (name, object_value) in scene_params.objects.iter_mut() {
-        let (object, count) = match process_object(name, object_value) {
+    for (i, (name, object_value)) in scene_params.objects.iter_mut().enumerate() {
+        let (object, count) = match process_object(name, object_value, i) {
             Ok((object, count)) => (object, count),
             Err(error) => return Err(error),
         };
@@ -122,10 +131,9 @@ pub fn read_input(filename: &str) -> Result<(Scene, u32), SceneParseError> {
     }
 
     Ok((
-        Scene {
+        RenderTask {
+            scene: Scene::new(objects, Vec3::from_array(settings.environment)),
             camera,
-            objects,
-            environment: Vec3::from_array(settings.environment),
             samples_per_pixel: settings.samples_per_pixel,
             max_ray_depth: settings.max_ray_depth,
         },
@@ -159,6 +167,7 @@ fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
 fn process_object(
     name: &str,
     object_value: &mut Value,
+    id: usize,
 ) -> Result<(Box<dyn Object>, u32), SceneParseError> {
     let Some(object_map) = object_value.as_object_mut() else {
         return Err(SceneParseError {
@@ -194,6 +203,7 @@ fn process_object(
 
             Ok((
                 Box::new(Sphere::new(
+                    id,
                     Vec3::from_array(sphere_params.center),
                     sphere_params.radius,
                     material,
@@ -216,6 +226,7 @@ fn process_object(
 
             Ok((
                 Box::new(Triangle::new(
+                    id,
                     Vec3::from_array(triangle_params.point1),
                     Vec3::from_array(triangle_params.point2),
                     Vec3::from_array(triangle_params.point3),
@@ -266,7 +277,7 @@ fn process_object(
             };
 
             Ok((
-                Box::new(Mesh::new(vertices, indices_and_bounds, material)),
+                Box::new(Mesh::new(id, vertices, indices_and_bounds, material)),
                 triangle_count,
             ))
         }
@@ -277,13 +288,8 @@ fn process_object(
 }
 
 fn process_material(material_value: &mut Value) -> Option<Material> {
-    let Some(material_map) = material_value.as_object_mut() else {
-        return None;
-    };
-
-    let Some((_, material_type)) = material_map.remove_entry("type") else {
-        return None;
-    };
+    let material_map = material_value.as_object_mut()?;
+    let (_, material_type) = material_map.remove_entry("type")?;
 
     match material_type.as_str() {
         Some("diffuse") => {
@@ -342,7 +348,7 @@ fn read_obj(filename: &str) -> Result<(Vec<Vec3>, Vec<[u32; 3]>), SceneParseErro
 
         match tokens[0] {
             "v" => {
-                let mut points = Vec3::splat(0.0);
+                let mut points = Vec3::ZERO;
                 for j in 0..3 {
                     let Ok(value) = tokens[j + 1].parse::<f32>() else {
                         return invalid_value_error(i);
@@ -400,12 +406,8 @@ pub fn save_to_png(film: &Film, filename: &str) -> Result<(), Box<dyn Error>> {
         .pixel_data
         .iter()
         .flat_map(|rgb| {
-            let srgb = rgb.powf(1.0 / 2.2);
-            [
-                (srgb.x.clamp(0.0, 1.0) * 255.0) as u8,
-                (srgb.y.clamp(0.0, 1.0) * 255.0) as u8,
-                (srgb.z.clamp(0.0, 1.0) * 255.0) as u8,
-            ]
+            let srgb = rgb.powf(1.0 / 2.2).clamp(Vec3::ZERO, Vec3::ONE) * 255.0;
+            [srgb.x as u8, srgb.y as u8, srgb.z as u8]
         })
         .collect();
 
@@ -418,6 +420,5 @@ pub fn save_to_png(film: &Film, filename: &str) -> Result<(), Box<dyn Error>> {
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
     encoder.write_header()?.write_image_data(&rgb_values)?;
-
     Ok(())
 }
