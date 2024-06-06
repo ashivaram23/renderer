@@ -13,7 +13,7 @@ const BVH_NUM_SPLITS: usize = 40;
 
 pub trait Object: Sync {
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
-    fn material(&self) -> Material;
+    fn material(&self) -> &Material;
     fn sample_surface(&self, origin_point: Vec3) -> (Hit, f32);
     fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32;
 }
@@ -37,25 +37,19 @@ pub struct Bounds {
     pub max: Vec3,
 }
 
-#[derive(Clone, Copy)]
 pub enum Material {
     Diffuse(Vec3),
-    Mirror(Vec3),
     Emitter(Vec3, f32),
+    Metal(Vec3, f32),
+    Nonmetal(Vec3, f32, f32),
+    Glass(Vec3, f32, f32),
+    Mix(Box<Material>, Box<Material>, f32),
 }
 
 pub struct Sphere {
     id: u32,
     center: Vec3,
     radius: f32,
-    material: Material,
-}
-
-pub struct Triangle {
-    id: u32,
-    point1: Vec3,
-    point2: Vec3,
-    point3: Vec3,
     material: Material,
 }
 
@@ -113,17 +107,15 @@ impl Bounds {
 impl Material {
     pub fn bsdf_multiplier(&self, incident: &Vec3, _exitant: &Vec3, normal: &Vec3) -> Vec3 {
         match self {
-            Material::Diffuse(reflectance) => *reflectance * incident.dot(*normal) / PI,
-            Material::Mirror(_) => todo!(),
-            Material::Emitter(radiance, strength) => {
-                *radiance * *strength * incident.dot(*normal) / PI
-            }
+            Material::Diffuse(color) => *color * incident.dot(*normal) / PI,
+            Material::Emitter(color, _) => *color * incident.dot(*normal) / PI,
+            _ => todo!(),
         }
     }
 
     pub fn emitted(&self, _exitant: &Vec3) -> Vec3 {
         match self {
-            Material::Emitter(radiance, strength) => *radiance * *strength,
+            Material::Emitter(color, strength) => *color * *strength,
             _ => Vec3::ZERO,
         }
     }
@@ -139,14 +131,14 @@ impl Material {
                 let rotated = Quat::from_rotation_arc(Vec3::Y, *normal).mul_vec3(direction);
                 (rotated, direction.dot(Vec3::Y) / PI)
             }
-            Material::Mirror(_) => todo!(),
+            _ => todo!(),
         }
     }
 
     pub fn direction_pdf(&self, direction: &Vec3, normal: &Vec3) -> f32 {
         match self {
             Material::Diffuse(_) | Material::Emitter(_, _) => direction.dot(*normal) / PI,
-            Material::Mirror(_) => todo!(),
+            _ => todo!(),
         }
     }
 }
@@ -199,56 +191,12 @@ impl Object for Sphere {
         })
     }
 
-    fn material(&self) -> Material {
-        self.material
+    fn material(&self) -> &Material {
+        &self.material
     }
 
     fn sample_surface(&self, origin_point: Vec3) -> (Hit, f32) {
         // later, try to only sample smaller potentially visible part, and update surface_pdf too
-        todo!()
-    }
-
-    fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32 {
-        todo!()
-    }
-}
-
-impl Triangle {
-    pub fn new(id: usize, point1: Vec3, point2: Vec3, point3: Vec3, material: Material) -> Self {
-        Triangle {
-            id: id as u32,
-            point1,
-            point2,
-            point3,
-            material,
-        }
-    }
-}
-
-impl Object for Triangle {
-    fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        intersect_triangle(ray, self.point1, self.point2, self.point3).map(
-            |(distance, mut normal)| {
-                if ray.direction.dot(normal) > 0.0 {
-                    normal *= -1.0;
-                }
-
-                Hit {
-                    id: self.id,
-                    triangle_id: 0,
-                    point: ray.at(distance - FLOAT_ERROR),
-                    distance: distance - FLOAT_ERROR,
-                    normal,
-                }
-            },
-        )
-    }
-
-    fn material(&self) -> Material {
-        self.material
-    }
-
-    fn sample_surface(&self, point: Vec3) -> (Hit, f32) {
         todo!()
     }
 
@@ -345,8 +293,8 @@ impl Object for Mesh {
         })
     }
 
-    fn material(&self) -> Material {
-        self.material
+    fn material(&self) -> &Material {
+        &self.material
     }
 
     fn sample_surface(&self, point: Vec3) -> (Hit, f32) {
@@ -368,7 +316,7 @@ impl Object for Mesh {
             normal *= -1.0;
         }
 
-        let surface_pdf = 2.0 / side2_cross_side1.length(); // todo: fix area calculation, currently off
+        let surface_pdf = 2.0 / side2_cross_side1.length();
         let distance = triangle_point.distance(point);
         let area_to_solid_angle =
             distance.powi(2) / normal.dot((point - triangle_point).normalize());
@@ -381,7 +329,7 @@ impl Object for Mesh {
                 distance,
                 normal,
             },
-            area_to_solid_angle / 1.365, // todo: replace hardcoded for cornell with correct area calculation
+            area_to_solid_angle * surface_pdf / self.indices.len() as f32,
         )
     }
 
@@ -397,12 +345,12 @@ impl Object for Mesh {
             normal *= -1.0;
         }
 
-        let surface_pdf = 2.0 / side2_cross_side1.length(); // fix area calculations
+        let surface_pdf = 2.0 / side2_cross_side1.length();
         let distance = triangle_point.distance(origin_point);
         let area_to_solid_angle =
             distance.powi(2) / normal.dot((origin_point - triangle_point).normalize());
 
-        area_to_solid_angle / 1.365 // replace hardcoded
+        area_to_solid_angle * surface_pdf / self.indices.len() as f32
     }
 }
 

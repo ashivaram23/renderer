@@ -17,7 +17,7 @@
             "file": "scenes/bunnyetc/objects/floor.obj",
             "material": {
                 "type": "diffuse",
-                "reflectance": [0.5, 0.3, 0.4]
+                "color": [0.5, 0.3, 0.4]
             }
         },
         "bunny": {
@@ -25,7 +25,7 @@
             "file": "scenes/bunnyetc/objects/bunnyetc-bunny.obj",
             "material": {
                 "type": "diffuse",
-                "reflectance": [0.8, 0.3, 0.1]
+                "color": [0.8, 0.3, 0.1]
             }
         },
         "monkey": {
@@ -33,7 +33,7 @@
             "file": "scenes/bunnyetc/objects/bunnyetc-monkey.obj",
             "material": {
                 "type": "diffuse",
-                "reflectance": [0.8, 0.8, 0.8]
+                "color": [0.8, 0.8, 0.8]
             }
         },
         "teapot": {
@@ -41,7 +41,7 @@
             "file": "scenes/bunnyetc/objects/bunnyetc-teapot.obj",
             "material": {
                 "type": "diffuse",
-                "reflectance": [0.35, 0.8, 0.25]
+                "color": [0.35, 0.8, 0.25]
             }
         }
     }

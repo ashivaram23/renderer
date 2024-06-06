@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    objects::{Bounds, Material, Mesh, Object, Sphere, Triangle},
+    objects::{Bounds, Material, Mesh, Object, Sphere},
     scene::{Camera, Film, RenderTask, Scene},
 };
 use clap::{Arg, Command};
@@ -16,15 +16,6 @@ use png::Encoder;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde_json::{from_str, from_value, Map, Value};
-
-//
-// todo:
-// in anticipation for cases with lots of objects (which is why added a scene-wide bvh of objects):
-// - modify scene file format to reuse obj files (but still going to make a new mesh for each one of course) and allow displacements
-// - and modify scene_from_blend.py to handle this
-// - and modify read_obj to handle this, and the other methods to cache an obj file if it's one of the reused ones and to read from that cache instead of reopening the obj file each time
-// and everything else
-//
 
 #[derive(Deserialize, Debug)]
 struct SceneParams {
@@ -57,14 +48,6 @@ struct SphereParams {
 }
 
 #[derive(Deserialize, Debug)]
-struct TriangleParams {
-    point1: [f32; 3],
-    point2: [f32; 3],
-    point3: [f32; 3],
-    material: Value,
-}
-
-#[derive(Deserialize, Debug)]
 struct MeshParams {
     file: String,
     material: Value,
@@ -72,13 +55,40 @@ struct MeshParams {
 
 #[derive(Deserialize, Debug)]
 struct DiffuseParams {
-    reflectance: [f32; 3],
+    color: [f32; 3],
 }
 
 #[derive(Deserialize, Debug)]
 struct EmitterParams {
-    radiance: [f32; 3],
+    color: [f32; 3],
     strength: f32,
+}
+
+#[derive(Deserialize, Debug)]
+struct MetalParams {
+    color: [f32; 3],
+    roughness: f32,
+}
+
+#[derive(Deserialize, Debug)]
+struct NonmetalParams {
+    color: [f32; 3],
+    roughness: f32,
+    specular: f32,
+}
+
+#[derive(Deserialize, Debug)]
+struct GlassParams {
+    color: [f32; 3],
+    roughness: f32,
+    specular: f32,
+}
+
+#[derive(Deserialize, Debug)]
+struct MixParams {
+    first: Value,
+    second: Value,
+    factor: f32,
 }
 
 #[derive(Debug)]
@@ -97,7 +107,7 @@ impl Error for SceneParseError {}
 pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> {
     let Ok(scene_json) = fs::read_to_string(Path::new(filename)) else {
         return Err(SceneParseError {
-            message: format!("Couldn't open file at {}", filename),
+            message: format!("couldn't open file at {}", filename),
         });
     };
 
@@ -114,7 +124,7 @@ pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> 
 
     let Ok(settings) = from_value::<SettingsParams>(scene_params.settings) else {
         return Err(SceneParseError {
-            message: "Scene settings aren't correctly formatted".to_string(),
+            message: "scene settings aren't correctly formatted".to_string(),
         });
     };
 
@@ -144,13 +154,13 @@ pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> 
 fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
     let Ok(camera_params) = from_value::<CameraParams>(camera_value) else {
         return Err(SceneParseError {
-            message: "Camera parameters aren't correctly formatted".to_string(),
+            message: "camera parameters aren't correctly formatted".to_string(),
         });
     };
 
     if camera_params.field_of_view <= 0.0 || camera_params.field_of_view >= 180.0 {
         return Err(SceneParseError {
-            message: "Camera field of view must be between 0 and 180 degrees".to_string(),
+            message: "camera field of view must be between 0 and 180 degrees".to_string(),
         });
     }
 
@@ -177,7 +187,7 @@ fn process_object(
 
     let Some((_, object_type)) = object_map.remove_entry("type") else {
         return Err(SceneParseError {
-            message: format!("Object {} doesn't have type field", name),
+            message: format!("object {} doesn't have type field", name),
         });
     };
 
@@ -185,21 +195,20 @@ fn process_object(
         Some("sphere") => {
             let Ok(mut sphere_params) = from_value::<SphereParams>(object_value.clone()) else {
                 return Err(SceneParseError {
-                    message: format!("Sphere object {} has invalid parameters", name),
+                    message: format!("sphere object {} has invalid parameters", name),
                 });
             };
 
             if sphere_params.radius < 0.0 {
                 return Err(SceneParseError {
-                    message: format!("Sphere object {} has negative radius", name),
+                    message: format!("sphere object {} has negative radius", name),
                 });
             }
 
-            let Some(material) = process_material(&mut sphere_params.material) else {
-                return Err(SceneParseError {
-                    message: format!("Sphere object {} has invalid material", name),
-                });
-            };
+            let material = process_material(
+                &format!("sphere object {}", name),
+                &mut sphere_params.material,
+            )?;
 
             Ok((
                 Box::new(Sphere::new(
@@ -211,34 +220,10 @@ fn process_object(
                 1,
             ))
         }
-        Some("triangle") => {
-            let Ok(mut triangle_params) = from_value::<TriangleParams>(object_value.clone()) else {
-                return Err(SceneParseError {
-                    message: format!("Triangle object {} has invalid parameters", name),
-                });
-            };
-
-            let Some(material) = process_material(&mut triangle_params.material) else {
-                return Err(SceneParseError {
-                    message: format!("Triangle object {} has invalid material", name),
-                });
-            };
-
-            Ok((
-                Box::new(Triangle::new(
-                    id,
-                    Vec3::from_array(triangle_params.point1),
-                    Vec3::from_array(triangle_params.point2),
-                    Vec3::from_array(triangle_params.point3),
-                    material,
-                )),
-                1,
-            ))
-        }
         Some("mesh") => {
             let Ok(mut mesh_params) = from_value::<MeshParams>(object_value.clone()) else {
                 return Err(SceneParseError {
-                    message: format!("Mesh object {} has invalid parameters", name),
+                    message: format!("mesh object {} has invalid parameters", name),
                 });
             };
 
@@ -250,7 +235,7 @@ fn process_object(
             let triangle_count = indices.len() as u32;
             if triangle_count == 0 {
                 return Err(SceneParseError {
-                    message: format!("Mesh object {} is empty", name),
+                    message: format!("mesh object {} is empty", name),
                 });
             }
 
@@ -270,11 +255,8 @@ fn process_object(
                 })
                 .collect();
 
-            let Some(material) = process_material(&mut mesh_params.material) else {
-                return Err(SceneParseError {
-                    message: format!("Mesh object {} has invalid material", name),
-                });
-            };
+            let material =
+                process_material(&format!("mesh object {}", name), &mut mesh_params.material)?;
 
             Ok((
                 Box::new(Mesh::new(id, vertices, indices_and_bounds, material)),
@@ -282,52 +264,121 @@ fn process_object(
             ))
         }
         _ => Err(SceneParseError {
-            message: format!("Object {} has invalid type", name),
+            message: format!("object {} has invalid type", name),
         }),
     }
 }
 
-fn process_material(material_value: &mut Value) -> Option<Material> {
-    let material_map = material_value.as_object_mut()?;
-    let (_, material_type) = material_map.remove_entry("type")?;
+fn process_material(
+    object_name: &str,
+    material_value: &mut Value,
+) -> Result<Material, SceneParseError> {
+    let invalid_material_error = Err(SceneParseError {
+        message: format!("{} has invalid material", object_name),
+    });
+
+    let Some(material_map) = material_value.as_object_mut() else {
+        return invalid_material_error;
+    };
+
+    let Some((_, material_type)) = material_map.remove_entry("type") else {
+        return invalid_material_error;
+    };
 
     match material_type.as_str() {
         Some("diffuse") => {
             let Ok(diffuse_params) = from_value::<DiffuseParams>(material_value.clone()) else {
-                return None;
+                return invalid_material_error;
             };
 
-            Some(Material::Diffuse(Vec3::from_array(
-                diffuse_params.reflectance,
-            )))
-        }
-        Some("mirror") => {
-            let Ok(diffuse_params) = from_value::<DiffuseParams>(material_value.clone()) else {
-                return None;
-            };
-
-            Some(Material::Mirror(Vec3::from_array(
-                diffuse_params.reflectance,
-            )))
+            Ok(Material::Diffuse(Vec3::from_array(diffuse_params.color)))
         }
         Some("emitter") => {
             let Ok(emitter_params) = from_value::<EmitterParams>(material_value.clone()) else {
-                return None;
+                return invalid_material_error;
             };
 
-            Some(Material::Emitter(
-                Vec3::from_array(emitter_params.radiance),
+            let emits_light = emitter_params.color.iter().any(|value| *value > 0.0)
+                && emitter_params.strength > 0.0;
+            if !emits_light {
+                return Err(SceneParseError {
+                    message: format!(
+                        "emitter material for {} should have nonzero strength and color",
+                        object_name
+                    ),
+                });
+            }
+
+            Ok(Material::Emitter(
+                Vec3::from_array(emitter_params.color),
                 emitter_params.strength,
             ))
         }
-        _ => None,
+        Some("metal") => {
+            let Ok(metal_params) = from_value::<MetalParams>(material_value.clone()) else {
+                return invalid_material_error;
+            };
+
+            Ok(Material::Metal(
+                Vec3::from_array(metal_params.color),
+                metal_params.roughness,
+            ))
+        }
+        Some("nonmetal") => {
+            let Ok(nonmetal_params) = from_value::<NonmetalParams>(material_value.clone()) else {
+                return invalid_material_error;
+            };
+
+            Ok(Material::Nonmetal(
+                Vec3::from_array(nonmetal_params.color),
+                nonmetal_params.roughness,
+                nonmetal_params.specular,
+            ))
+        }
+        Some("glass") => {
+            let Ok(glass_params) = from_value::<GlassParams>(material_value.clone()) else {
+                return invalid_material_error;
+            };
+
+            Ok(Material::Glass(
+                Vec3::from_array(glass_params.color),
+                glass_params.roughness,
+                glass_params.specular,
+            ))
+        }
+        Some("mix") => {
+            let Ok(mut mix_params) = from_value::<MixParams>(material_value.clone()) else {
+                return invalid_material_error;
+            };
+
+            let first = process_material(object_name, &mut mix_params.first)?;
+            if let Material::Emitter(_, _) = first {
+                return Err(SceneParseError {
+                    message: format!("mix material for {} should't contain emitters", object_name),
+                });
+            }
+
+            let second = process_material(object_name, &mut mix_params.second)?;
+            if let Material::Emitter(_, _) = second {
+                return Err(SceneParseError {
+                    message: format!("mix material for {} should't contain emitters", object_name),
+                });
+            }
+
+            Ok(Material::Mix(
+                Box::new(first),
+                Box::new(second),
+                mix_params.factor,
+            ))
+        }
+        _ => invalid_material_error,
     }
 }
 
 fn read_obj(filename: &str) -> Result<(Vec<Vec3>, Vec<[u32; 3]>), SceneParseError> {
     let Ok(file) = File::open(filename) else {
         return Err(SceneParseError {
-            message: format!("Couldn't open OBJ file at {}", filename),
+            message: format!("couldn't open OBJ file at {}", filename),
         });
     };
 

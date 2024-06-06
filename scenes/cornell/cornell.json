@@ -17,7 +17,7 @@
             "file": "scenes/cornell/objects/Back.obj", 
             "material": {
                 "type": "diffuse", 
-                "reflectance": [0.5, 0.5, 0.5]
+                "color": [0.5, 0.5, 0.5]
             }
         }, 
         "Ceiling": {
@@ -25,7 +25,7 @@
             "file": "scenes/cornell/objects/Ceiling.obj", 
             "material": {
                 "type": "diffuse", 
-                "reflectance": [0.5, 0.5, 0.5]
+                "color": [0.5, 0.5, 0.5]
             }
         }, 
         "Cube": {
@@ -33,7 +33,7 @@
             "file": "scenes/cornell/objects/Cube.obj", 
             "material": {
                 "type": "diffuse", 
-                "reflectance": [0.5, 0.5, 0.5]
+                "color": [0.5, 0.5, 0.5]
             }
         }, 
         "CubeSmall": {
@@ -41,7 +41,7 @@
             "file": "scenes/cornell/objects/CubeSmall.obj", 
             "material": {
                 "type": "diffuse", 
-                "reflectance": [0.5, 0.5, 0.5]
+                "color": [0.5, 0.5, 0.5]
             }
         }, 
         "Floor": {
@@ -49,7 +49,7 @@
             "file": "scenes/cornell/objects/Floor.obj", 
             "material": {
                 "type": "diffuse", 
-                "reflectance": [0.5, 0.5, 0.5]
+                "color": [0.5, 0.5, 0.5]
             }
         }, 
         "Left": {
@@ -57,7 +57,7 @@
             "file": "scenes/cornell/objects/Left.obj", 
             "material": {
                 "type": "diffuse", 
-                "reflectance": [0.5, 0.0, 0.0]
+                "color": [0.5, 0.0, 0.0]
             }
         }, 
         "Light": {
@@ -65,7 +65,7 @@
             "file": "scenes/cornell/objects/Light.obj", 
             "material": {
                 "type": "emitter", 
-                "radiance": [1.0, 1.0, 1.0], 
+                "color": [1.0, 1.0, 1.0], 
                 "strength": 30
             }
         }, 
@@ -74,7 +74,7 @@
             "file": "scenes/cornell/objects/Right.obj", 
             "material": {
                 "type": "diffuse", 
-                "reflectance": [0.0, 0.5, 0.0]
+                "color": [0.0, 0.5, 0.0]
             }
         }
     }
