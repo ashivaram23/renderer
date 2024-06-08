@@ -128,6 +128,8 @@ pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> 
         });
     };
 
+    let environment = Vec3::from_array(settings.environment).clamp(Vec3::ZERO, Vec3::ONE);
+
     let mut primitive_count = 0;
     let mut objects: Vec<Box<dyn Object>> = Vec::new();
     for (i, (name, object_value)) in scene_params.objects.iter_mut().enumerate() {
@@ -142,7 +144,7 @@ pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> 
 
     Ok((
         RenderTask {
-            scene: Scene::new(objects, Vec3::from_array(settings.environment)),
+            scene: Scene::new(objects, environment),
             camera,
             samples_per_pixel: settings.samples_per_pixel,
             max_ray_depth: settings.max_ray_depth,
@@ -291,7 +293,9 @@ fn process_material(
                 return invalid_material_error;
             };
 
-            Ok(Material::Diffuse(Vec3::from_array(diffuse_params.color)))
+            Ok(Material::Diffuse(
+                Vec3::from_array(diffuse_params.color).clamp(Vec3::ZERO, Vec3::ONE),
+            ))
         }
         Some("emitter") => {
             let Ok(emitter_params) = from_value::<EmitterParams>(material_value.clone()) else {
@@ -310,7 +314,7 @@ fn process_material(
             }
 
             Ok(Material::Emitter(
-                Vec3::from_array(emitter_params.color),
+                Vec3::from_array(emitter_params.color).clamp(Vec3::ZERO, Vec3::ONE),
                 emitter_params.strength,
             ))
         }
@@ -320,8 +324,8 @@ fn process_material(
             };
 
             Ok(Material::Metal(
-                Vec3::from_array(metal_params.color),
-                metal_params.roughness,
+                Vec3::from_array(metal_params.color).clamp(Vec3::ZERO, Vec3::ONE),
+                metal_params.roughness.clamp(0.0, 1.0),
             ))
         }
         Some("nonmetal") => {
@@ -330,9 +334,9 @@ fn process_material(
             };
 
             Ok(Material::Nonmetal(
-                Vec3::from_array(nonmetal_params.color),
-                nonmetal_params.roughness,
-                nonmetal_params.specular,
+                Vec3::from_array(nonmetal_params.color).clamp(Vec3::ZERO, Vec3::ONE),
+                nonmetal_params.roughness.clamp(0.0, 1.0),
+                nonmetal_params.specular.clamp(0.0, 1.0),
             ))
         }
         Some("glass") => {
@@ -341,9 +345,9 @@ fn process_material(
             };
 
             Ok(Material::Glass(
-                Vec3::from_array(glass_params.color),
-                glass_params.roughness,
-                glass_params.specular,
+                Vec3::from_array(glass_params.color).clamp(Vec3::ZERO, Vec3::ONE),
+                glass_params.roughness.clamp(0.0, 1.0),
+                glass_params.specular.clamp(0.0, 1.0),
             ))
         }
         Some("mix") => {
@@ -368,7 +372,7 @@ fn process_material(
             Ok(Material::Mix(
                 Box::new(first),
                 Box::new(second),
-                mix_params.factor,
+                mix_params.factor.clamp(0.0, 1.0),
             ))
         }
         _ => invalid_material_error,

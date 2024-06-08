@@ -15,6 +15,8 @@ use scene::RenderTask;
 // Remaining steps:
 // - finish environment light sampling and sample_surface/pdf for all objects
 //   (ensuring correct area sampling, and sampling likely visible subset)
+//   actually just dont include env in light sampling at all, since bsdf good
+//   enough for that..
 // - materials: diffuse, metal, nonmetal, glass, and mix, including properly
 //   handling transmission (and what that means for normals/backfaces/internal
 //   rays) and any special cases (eg specular) in path tracing
@@ -22,7 +24,8 @@ use scene::RenderTask;
 // - updating scene_from_blend to work with 4.1, handle all features (and figure
 //   out exact correspondence for eg emission strength as well as materials, and
 //   print message when using substitutes), and scene file having ability to
-//   refer to same obj file with displacement/rotation
+//   refer to same obj file with displacement/rotation, and prettify json dump
+//   and make sure will result in no io errors (eg emitters with zero strength)
 // - qmc sampling
 // - depth of field support
 // - firefly reduction issues (making sure the clamping doesnt change the look)
@@ -37,6 +40,7 @@ use scene::RenderTask;
 //   (test with a set of blender scenes that cover all cases/features)
 // - cleaned up and commented code, proper structure, ensure neat and efficient
 //   and robust (float error, divides by zero, special cases, etc)
+// - things like reordering functions so that it makes sense to read (top first)
 // - readme and proper documentation with sources and picture samples, and
 //   make final git repo neat
 //

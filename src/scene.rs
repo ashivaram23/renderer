@@ -96,6 +96,10 @@ impl Scene {
         Some((light_ray, light_pdf / light_count as f32, emission))
     }
 
+    pub fn environment_pdf(&self) -> f32 {
+        todo!() // delete this function, this can just be hardcoded into path_trace.rs because it will always be the same...
+    }
+
     pub fn object_id(&self, id: u32) -> &dyn Object {
         &*self.objects[id as usize]
     }

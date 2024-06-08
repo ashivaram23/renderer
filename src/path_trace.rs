@@ -21,12 +21,12 @@ fn importance_sample_bsdf(
     let bsdf_multiplier_at_hit =
         hit_material.bsdf_multiplier(&next_ray.direction, prev_direction, &hit.normal) / bsdf_pdf;
 
-    // Traces the new direction to find the next hit point, or returns early if hits environment
+    // Traces the new direction to find the next hit point, and returns early if hits environment
     let Some(next_hit) = scene.trace_ray(&next_ray) else {
         return (
             bsdf_multiplier_at_hit,
             scene.environment,
-            0.0,
+            bsdf_pdf.powi(2) / (bsdf_pdf.powi(2) + scene.environment_pdf().powi(2)),
             next_ray,
             None,
         );
@@ -104,9 +104,6 @@ pub fn radiance(ray: Ray, scene: &Scene, max_depth: u32) -> Vec3 {
         // Estimates path contribution by sampling the BSDF at the hit point
         let (bsdf_sample_multiplier, bsdf_sample_emission, bsdf_sample_weight, next_ray, next_hit) =
             importance_sample_bsdf(&hit, &prev_direction, scene);
-        let Some(next_hit) = next_hit else {
-            return radiance + throughput * bsdf_sample_multiplier * bsdf_sample_emission;
-        };
 
         // Estimates path contribution by sampling among the lights in the scene
         let (light_sample_multiplier, light_sample_emission, light_sample_weight) =
@@ -116,6 +113,11 @@ pub fn radiance(ray: Ray, scene: &Scene, max_depth: u32) -> Vec3 {
         radiance += (bsdf_sample_weight * bsdf_sample_multiplier * bsdf_sample_emission
             + light_sample_weight * light_sample_multiplier * light_sample_emission)
             * throughput;
+
+        // Stops if path can't continue because it hit the environment or a non-reflecting emitter
+        let Some(next_hit) = next_hit else {
+            break;
+        };
 
         // Updates the stored hits (using the new bounce from the BSDF sample) and the throughput
         hit = next_hit;
