@@ -12,9 +12,16 @@ const BVH_LEAF_MAX: usize = 4;
 const BVH_NUM_SPLITS: usize = 40;
 
 pub trait Object: Sync {
+    /// Returns the closest intersection of this object with a ray
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
+
+    /// Returns this object's material
     fn material(&self) -> &Material;
+
+    /// Samples a point on the surface of this object, for light sampling
     fn sample_surface(&self, origin_point: Vec3) -> (Hit, f32);
+
+    /// Returns the probability density of sampling a surface point
     fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32;
 }
 
@@ -69,33 +76,36 @@ pub struct BoundingBox {
 }
 
 impl Ray {
+    /// Creates a Ray struct from an origin and normalized direction
     pub fn new(origin: Vec3, direction: Vec3) -> Self {
-        Ray {
-            origin,
-            direction: direction.normalize(),
-        }
+        Ray { origin, direction }
     }
 
+    /// Finds the point at a given distance from the origin along the ray direction
     pub fn at(&self, distance: f32) -> Vec3 {
         self.origin + distance * self.direction
     }
 }
 
 impl Bounds {
+    /// Adds other bounds to these bounds (in-place union)
     fn add_bounds(&mut self, other: &Bounds) {
         self.min = self.min.min(other.min);
         self.max = self.max.max(other.max);
     }
 
+    /// Expands these bounds by a certain amount on all sides
     fn expand(&mut self, addition: Vec3) {
         self.min -= addition;
         self.max += addition;
     }
 
+    /// Returns the size of the box contained by these bounds
     fn size(&self) -> Vec3 {
         self.max - self.min
     }
 
+    /// Returns the union of these bounds with other bounds
     fn union(&self, other: &Bounds) -> Self {
         Bounds {
             min: self.min.min(other.min),
@@ -105,14 +115,36 @@ impl Bounds {
 }
 
 impl Material {
-    pub fn bsdf_multiplier(&self, incident: &Vec3, _exitant: &Vec3, normal: &Vec3) -> Vec3 {
+    /// Returns BSDF * cos(theta) at a point (incident points towards incoming light)
+    pub fn bsdf_multiplier(&self, incident: &Vec3, exitant: &Vec3, normal: &Vec3) -> Vec3 {
         match self {
-            Material::Diffuse(color) => *color * incident.dot(*normal) / PI,
-            Material::Emitter(color, _) => *color * incident.dot(*normal) / PI,
-            _ => todo!(),
+            Material::Diffuse(color) => *color * normal.dot(*incident) / PI,
+            Material::Emitter(_, _) => Vec3::ZERO,
+            Material::Metal(color, roughness) => {
+                let normal_dot_incident = normal.dot(*incident);
+                let normal_dot_exitant = normal.dot(*exitant);
+
+                let half = (*incident + *exitant).normalize();
+                let half_dot_normal = half.dot(*normal);
+                let half_dot_incident = half.dot(*incident);
+
+                let fresnel = *color + (1.0 - *color) * (1.0 - half_dot_incident).powi(5);
+
+                let masking = todo!();
+
+                let half_vector = (*incident + *exitant).normalize();
+
+                let alpha_sq = roughness.powi(4);
+
+                todo!()
+            }
+            Material::Nonmetal(_, _, _) => todo!(),
+            Material::Glass(_, _, _) => todo!(),
+            Material::Mix(_, _, _) => todo!(),
         }
     }
 
+    /// Returns the radiance emitted by this material in a direction
     pub fn emitted(&self, _exitant: &Vec3) -> Vec3 {
         match self {
             Material::Emitter(color, strength) => *color * *strength,
@@ -120,6 +152,7 @@ impl Material {
         }
     }
 
+    /// Samples a new direction that points towards incoming light
     pub fn sample_direction(&self, normal: &Vec3) -> (Vec3, f32) {
         match self {
             Material::Diffuse(_) | Material::Emitter(_, _) => {
@@ -131,19 +164,27 @@ impl Material {
                 let rotated = Quat::from_rotation_arc(Vec3::Y, *normal).mul_vec3(direction);
                 (rotated, direction.dot(Vec3::Y) / PI)
             }
-            _ => todo!(),
+            Material::Metal(_, _) => todo!(),
+            Material::Nonmetal(_, _, _) => todo!(),
+            Material::Glass(_, _, _) => todo!(),
+            Material::Mix(_, _, _) => todo!(),
         }
     }
 
+    /// Returns the probability density of sampling a given direction
     pub fn direction_pdf(&self, direction: &Vec3, normal: &Vec3) -> f32 {
         match self {
             Material::Diffuse(_) | Material::Emitter(_, _) => direction.dot(*normal) / PI,
-            _ => todo!(),
+            Material::Metal(_, _) => todo!(),
+            Material::Nonmetal(_, _, _) => todo!(),
+            Material::Glass(_, _, _) => todo!(),
+            Material::Mix(_, _, _) => todo!(),
         }
     }
 }
 
 impl Sphere {
+    /// Creates a Sphere struct
     pub fn new(id: usize, center: Vec3, radius: f32, material: Material) -> Self {
         Sphere {
             id: id as u32,
@@ -206,6 +247,7 @@ impl Object for Sphere {
 }
 
 impl Mesh {
+    /// Creates a Mesh struct
     pub fn new(
         id: usize,
         vertices: Vec<Vec3>,
@@ -288,7 +330,7 @@ impl Object for Mesh {
             id: self.id,
             triangle_id: best_triangle_id as u32,
             point: ray.at(distance - FLOAT_ERROR),
-            distance: distance - FLOAT_ERROR, // should this just be distance? does it matter? check in eg teapot, etc
+            distance: distance - FLOAT_ERROR,
             normal,
         })
     }
@@ -354,6 +396,7 @@ impl Object for Mesh {
     }
 }
 
+/// Finds the intersection of a ray and triangle
 fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, Vec3)> {
     let side1 = p2 - p1;
     let side2 = p3 - p1;
@@ -383,6 +426,7 @@ fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, V
     }
 }
 
+/// Constructs a bounding volume hierarchy for triangles in a mesh
 fn make_bvh(
     indices_and_bounds: &mut [([u32; 3], Bounds)],
     mut full_bounds: Bounds,
@@ -492,12 +536,3 @@ fn make_bvh(
     bvh_tree[0].descendant_count = (bvh_tree.len() - 1) as u32;
     bvh_tree
 }
-
-// fn make_objects_bvh(
-//     object_bounds: &mut [([u32; 3], Bounds)],
-//     mut full_bounds: Bounds,
-//     start: usize,
-//     end: usize,
-// ) -> Vec<BoundingBox> {
-//     todo!()
-// }

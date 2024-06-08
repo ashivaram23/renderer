@@ -1,13 +1,11 @@
-use crate::objects::{BoundingBox, Hit, Material, Object, Ray, FLOAT_ERROR};
+use crate::objects::{Hit, Material, Object, Ray, FLOAT_ERROR};
 use glam::Vec3;
-use rand::{thread_rng, Rng};
+use rand::{seq::SliceRandom, thread_rng};
 
 pub struct Scene {
     pub environment: Vec3,
     pub objects: Vec<Box<dyn Object>>,
     pub lights: Vec<u32>,
-    indices_for_bvh: Vec<u32>,
-    bvh: Vec<BoundingBox>,
 }
 
 pub struct Film {
@@ -34,10 +32,8 @@ pub struct RenderTask {
 }
 
 impl Scene {
+    /// Creates a Scene struct from a Vec of objects and an environment color
     pub fn new(objects: Vec<Box<dyn Object>>, environment: Vec3) -> Self {
-        // make bvh etc here
-        // todo!()
-
         let mut lights = Vec::new();
         for (i, object) in objects.iter().enumerate() {
             if let Material::Emitter(_, _) = object.material() {
@@ -49,11 +45,10 @@ impl Scene {
             environment,
             objects,
             lights,
-            indices_for_bvh: Vec::new(),
-            bvh: Vec::new(),
         }
     }
 
+    /// Finds the closest intersection of a ray in the scene
     pub fn trace_ray(&self, ray: &Ray) -> Option<Hit> {
         let mut best_hit: Option<Hit> = None;
         for object in &self.objects {
@@ -67,20 +62,11 @@ impl Scene {
         best_hit
     }
 
-    pub fn sample_lights(&self, origin_point: Vec3) -> Option<(Ray, f32, Vec3)> {
-        let environment_has_light = self.environment.ne(&Vec3::ZERO);
-        let light_count = self.lights.len() + if environment_has_light { 1 } else { 0 };
-        if light_count == 0 {
-            return None;
-        }
+    /// Samples a point on the surface of the scene's lights
+    pub fn sample_lights(&self, origin_point: Vec3) -> Option<(Ray, f32)> {
+        let chosen_light_index = self.lights.choose(&mut thread_rng())?;
+        let chosen_light = &self.objects[*chosen_light_index as usize];
 
-        let chosen_light_index = thread_rng().gen_range(0..light_count);
-        if chosen_light_index == self.lights.len() {
-            return None;
-            todo!() // environment map incl visibility check
-        }
-
-        let chosen_light = &self.objects[self.lights[chosen_light_index] as usize];
         let (light_hit, light_pdf) = chosen_light.sample_surface(origin_point);
         let light_direction = (light_hit.point - origin_point).normalize();
         let light_ray = Ray::new(origin_point, light_direction);
@@ -88,24 +74,22 @@ impl Scene {
         let light_is_visible = self.trace_ray(&light_ray).is_some_and(|ray_hit| {
             ray_hit.id == light_hit.id && ray_hit.point.abs_diff_eq(light_hit.point, FLOAT_ERROR)
         });
-        if !light_is_visible {
-            return None;
+
+        if light_is_visible {
+            Some((light_ray, light_pdf / self.lights.len() as f32))
+        } else {
+            None
         }
-
-        let emission = chosen_light.material().emitted(&-light_direction);
-        Some((light_ray, light_pdf / light_count as f32, emission))
     }
 
-    pub fn environment_pdf(&self) -> f32 {
-        todo!() // delete this function, this can just be hardcoded into path_trace.rs because it will always be the same...
-    }
-
+    /// Returns an object given its ID (index in the objects array)
     pub fn object_id(&self, id: u32) -> &dyn Object {
         &*self.objects[id as usize]
     }
 }
 
 impl Camera {
+    /// Creates a Camera struct
     pub fn new(
         screen_width: u32,
         screen_height: u32,

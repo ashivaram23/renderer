@@ -104,6 +104,43 @@ impl Display for SceneParseError {
 
 impl Error for SceneParseError {}
 
+/// Saves a rendered image to a PNG file
+pub fn save_to_png(film: &Film, filename: &str) -> Result<(), Box<dyn Error>> {
+    let rgb_values: Vec<u8> = film
+        .pixel_data
+        .iter()
+        .flat_map(|rgb| {
+            let srgb = rgb.powf(1.0 / 2.2).clamp(Vec3::ZERO, Vec3::ONE) * 255.0;
+            [srgb.x as u8, srgb.y as u8, srgb.z as u8]
+        })
+        .collect();
+
+    let mut encoder = Encoder::new(
+        BufWriter::new(File::create(Path::new(filename))?),
+        film.screen_width,
+        film.screen_height,
+    );
+
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder.write_header()?.write_image_data(&rgb_values)?;
+    Ok(())
+}
+
+/// Reads command line arguments
+pub fn read_args() -> Option<(String, String)> {
+    let matches = Command::new("renderer")
+        .arg(Arg::new("input").required(true))
+        .arg(Arg::new("output").required(true))
+        .arg_required_else_help(true)
+        .get_matches();
+
+    let input = matches.get_one::<String>("input")?;
+    let output = matches.get_one::<String>("output")?;
+    Some((input.clone(), output.clone()))
+}
+
+/// Reads the scene file at a given path, returning a RenderTask and primitive count if successful
 pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> {
     let Ok(scene_json) = fs::read_to_string(Path::new(filename)) else {
         return Err(SceneParseError {
@@ -153,6 +190,7 @@ pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> 
     ))
 }
 
+/// Processes the scene file's camera parameters
 fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
     let Ok(camera_params) = from_value::<CameraParams>(camera_value) else {
         return Err(SceneParseError {
@@ -176,6 +214,7 @@ fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
     ))
 }
 
+/// Processes an object from the scene file
 fn process_object(
     name: &str,
     object_value: &mut Value,
@@ -271,6 +310,7 @@ fn process_object(
     }
 }
 
+/// Processes a material from the scene file
 fn process_material(
     object_name: &str,
     material_value: &mut Value,
@@ -379,6 +419,7 @@ fn process_material(
     }
 }
 
+/// Reads an OBJ file
 fn read_obj(filename: &str) -> Result<(Vec<Vec3>, Vec<[u32; 3]>), SceneParseError> {
     let Ok(file) = File::open(filename) else {
         return Err(SceneParseError {
@@ -442,38 +483,4 @@ fn read_obj(filename: &str) -> Result<(Vec<Vec3>, Vec<[u32; 3]>), SceneParseErro
     }
 
     Ok((vertices, indices))
-}
-
-pub fn read_args() -> Option<(String, String)> {
-    let matches = Command::new("renderer")
-        .arg(Arg::new("input").required(true))
-        .arg(Arg::new("output").required(true))
-        .arg_required_else_help(true)
-        .get_matches();
-
-    let input = matches.get_one::<String>("input")?;
-    let output = matches.get_one::<String>("output")?;
-    Some((input.clone(), output.clone()))
-}
-
-pub fn save_to_png(film: &Film, filename: &str) -> Result<(), Box<dyn Error>> {
-    let rgb_values: Vec<u8> = film
-        .pixel_data
-        .iter()
-        .flat_map(|rgb| {
-            let srgb = rgb.powf(1.0 / 2.2).clamp(Vec3::ZERO, Vec3::ONE) * 255.0;
-            [srgb.x as u8, srgb.y as u8, srgb.z as u8]
-        })
-        .collect();
-
-    let mut encoder = Encoder::new(
-        BufWriter::new(File::create(Path::new(filename))?),
-        film.screen_width,
-        film.screen_height,
-    );
-
-    encoder.set_color(png::ColorType::Rgb);
-    encoder.set_depth(png::BitDepth::Eight);
-    encoder.write_header()?.write_image_data(&rgb_values)?;
-    Ok(())
 }

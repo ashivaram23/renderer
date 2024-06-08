@@ -6,88 +6,7 @@ use crate::{
 };
 use glam::Vec3;
 
-// Estimates the light scattered at a point by sampling its BSDF for a new light bounce direction
-fn importance_sample_bsdf(
-    hit: &Hit,
-    prev_direction: &Vec3,
-    scene: &Scene,
-) -> (Vec3, Vec3, f32, Ray, Option<Hit>) {
-    // Samples the BSDF for a new direction
-    let hit_material = scene.object_id(hit.id).material();
-    let (next_ray_direction, bsdf_pdf) = hit_material.sample_direction(&hit.normal);
-    let next_ray = Ray::new(hit.point, next_ray_direction);
-
-    // Evaluates the BSDF at the original hit point
-    let bsdf_multiplier_at_hit =
-        hit_material.bsdf_multiplier(&next_ray.direction, prev_direction, &hit.normal) / bsdf_pdf;
-
-    // Traces the new direction to find the next hit point, and returns early if hits environment
-    let Some(next_hit) = scene.trace_ray(&next_ray) else {
-        return (
-            bsdf_multiplier_at_hit,
-            scene.environment,
-            bsdf_pdf.powi(2) / (bsdf_pdf.powi(2) + scene.environment_pdf().powi(2)),
-            next_ray,
-            None,
-        );
-    };
-
-    // Gets the light emitted from the next hit
-    let emission_from_next_hit = scene
-        .object_id(next_hit.id)
-        .material()
-        .emitted(&-next_ray.direction);
-
-    // Returns early if the next hit is not an emitter, allowing the path to continue
-    if emission_from_next_hit.eq(&Vec3::ZERO) {
-        return (
-            bsdf_multiplier_at_hit,
-            emission_from_next_hit,
-            0.0,
-            next_ray,
-            Some(next_hit),
-        );
-    }
-
-    // Calculates the multiple importance sampling weight for this estimate
-    let light_pdf =
-        scene
-            .object_id(next_hit.id)
-            .surface_pdf(hit.point, next_hit.point, next_hit.triangle_id)
-            / scene.lights.len() as f32;
-    let weight = bsdf_pdf.powi(2) / (bsdf_pdf.powi(2) + light_pdf.powi(2));
-
-    // Returns this estimate's contribution and weight, with None to show the path can't continue
-    (
-        bsdf_multiplier_at_hit,
-        emission_from_next_hit,
-        weight,
-        next_ray,
-        None,
-    )
-}
-
-// Estimates the direct illumination scattered at a point by sampling all the scene's lights
-fn importance_sample_lights(hit: &Hit, prev_direction: &Vec3, scene: &Scene) -> (Vec3, Vec3, f32) {
-    // Samples the scene's lights for a light point
-    let Some((light_ray, light_pdf, emission_from_light)) = scene.sample_lights(hit.point) else {
-        return (Vec3::ZERO, Vec3::ZERO, 0.0);
-    };
-
-    // Evaluates the BSDF at the original hit point
-    let hit_material = scene.object_id(hit.id).material();
-    let bsdf_multiplier_at_hit =
-        hit_material.bsdf_multiplier(&light_ray.direction, prev_direction, &hit.normal) / light_pdf;
-
-    // Calculates the multiple importance sampling weight for this estimate
-    let bsdf_pdf: f32 = hit_material.direction_pdf(&light_ray.direction, &hit.normal);
-    let weight = light_pdf.powi(2) / (bsdf_pdf.powi(2) + light_pdf.powi(2));
-
-    // Returns this estimate's contribution and weight
-    (bsdf_multiplier_at_hit, emission_from_light, weight)
-}
-
-// Estimates the incident radiance at a pixel point (ray.origin) from the camera ray (ray.direction)
+/// Estimates the incident radiance at a pixel (ray.origin) from the camera ray (ray.direction)
 pub fn radiance(ray: Ray, scene: &Scene, max_depth: u32) -> Vec3 {
     // Traces the first light bounce based on the camera ray
     let Some(mut hit) = scene.trace_ray(&ray) else {
@@ -134,4 +53,88 @@ pub fn radiance(ray: Ray, scene: &Scene, max_depth: u32) -> Vec3 {
     }
 
     radiance
+}
+
+/// Estimates the light scattered at a point by sampling its BSDF for a new light bounce direction
+fn importance_sample_bsdf(
+    hit: &Hit,
+    prev_direction: &Vec3,
+    scene: &Scene,
+) -> (Vec3, Vec3, f32, Ray, Option<Hit>) {
+    // Samples the BSDF for a new direction
+    let hit_material = scene.object_id(hit.id).material();
+    let (next_ray_direction, bsdf_pdf) = hit_material.sample_direction(&hit.normal);
+    let next_ray = Ray::new(hit.point, next_ray_direction);
+
+    // Evaluates the BSDF at the original hit point
+    let bsdf_multiplier_at_hit =
+        hit_material.bsdf_multiplier(&next_ray.direction, prev_direction, &hit.normal) / bsdf_pdf;
+
+    // Traces the new direction to find the next hit point, and returns early if hits environment
+    let Some(next_hit) = scene.trace_ray(&next_ray) else {
+        return (
+            bsdf_multiplier_at_hit,
+            scene.environment,
+            1.0,
+            next_ray,
+            None,
+        );
+    };
+
+    // Gets the light emitted from the next hit
+    let emission_from_next_hit = scene
+        .object_id(next_hit.id)
+        .material()
+        .emitted(&-next_ray.direction);
+
+    // Returns early if the next hit is not an emitter, allowing the path to continue
+    if emission_from_next_hit.eq(&Vec3::ZERO) {
+        return (
+            bsdf_multiplier_at_hit,
+            emission_from_next_hit,
+            0.0,
+            next_ray,
+            Some(next_hit),
+        );
+    }
+
+    // Calculates the multiple importance sampling weight for this estimate
+    let light_pdf =
+        scene
+            .object_id(next_hit.id)
+            .surface_pdf(hit.point, next_hit.point, next_hit.triangle_id)
+            / scene.lights.len() as f32;
+    let weight = bsdf_pdf.powi(2) / (bsdf_pdf.powi(2) + light_pdf.powi(2));
+
+    // Returns this estimate's contribution and weight, with None to show the path can't continue
+    (
+        bsdf_multiplier_at_hit,
+        emission_from_next_hit,
+        weight,
+        next_ray,
+        None,
+    )
+}
+
+/// Estimates the direct illumination scattered at a point by sampling all the scene's lights
+fn importance_sample_lights(hit: &Hit, prev_direction: &Vec3, scene: &Scene) -> (Vec3, Vec3, f32) {
+    // Samples the scene's lights for a light point
+    let Some((light_ray, light_pdf)) = scene.sample_lights(hit.point) else {
+        return (Vec3::ZERO, Vec3::ZERO, 0.0);
+    };
+
+    // Evaluates the BSDF at the original hit point
+    let hit_material = scene.object_id(hit.id).material();
+    let bsdf_multiplier_at_hit =
+        hit_material.bsdf_multiplier(&light_ray.direction, prev_direction, &hit.normal) / light_pdf;
+
+    // Gets the light emitted from the light hit
+    let emission_from_light = hit_material.emitted(&-light_ray.direction);
+
+    // Calculates the multiple importance sampling weight for this estimate
+    let bsdf_pdf: f32 = hit_material.direction_pdf(&light_ray.direction, &hit.normal);
+    let weight = light_pdf.powi(2) / (bsdf_pdf.powi(2) + light_pdf.powi(2));
+
+    // Returns this estimate's contribution and weight
+    (bsdf_multiplier_at_hit, emission_from_light, weight)
 }
