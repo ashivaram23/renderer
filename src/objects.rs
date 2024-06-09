@@ -355,21 +355,22 @@ impl Object for Mesh {
 
         let triangle_point = u * p1 + v * p2 + (1.0 - u - v) * p3;
         let side2_cross_side1 = (p3 - p1).cross(p2 - p1);
+
+        let triangle_point_to_point = (point - triangle_point).normalize();
         let mut normal = side2_cross_side1.normalize();
-        if (point - triangle_point).dot(normal) < 0.0 {
+        if triangle_point_to_point.dot(normal) < 0.0 {
             normal *= -1.0;
         }
 
         let surface_pdf = 2.0 / side2_cross_side1.length();
         let distance = triangle_point.distance(point);
-        let area_to_solid_angle =
-            distance.powi(2) / normal.dot((point - triangle_point).normalize());
+        let area_to_solid_angle = distance.powi(2) / normal.dot(triangle_point_to_point);
 
         (
             Hit {
                 id: self.id,
                 triangle_id: chosen_triangle_id as u32,
-                point: triangle_point,
+                point: triangle_point + FLOAT_ERROR * triangle_point_to_point,
                 distance,
                 normal,
             },
@@ -385,7 +386,7 @@ impl Object for Mesh {
 
         let side2_cross_side1 = (p3 - p1).cross(p2 - p1);
         let mut normal = side2_cross_side1.normalize();
-        if (triangle_point - origin_point).dot(normal) < 0.0 {
+        if (origin_point - triangle_point).dot(normal) < 0.0 {
             normal *= -1.0;
         }
 
