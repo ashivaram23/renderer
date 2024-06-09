@@ -63,7 +63,7 @@ impl Scene {
     }
 
     /// Samples a point on the surface of the scene's lights
-    pub fn sample_lights(&self, origin_point: Vec3) -> Option<(Ray, f32)> {
+    pub fn sample_lights(&self, origin_point: Vec3) -> Option<(Ray, f32, Vec3)> {
         let chosen_light_index = self.lights.choose(&mut thread_rng())?;
         let chosen_light = &self.objects[*chosen_light_index as usize];
 
@@ -76,7 +76,8 @@ impl Scene {
         });
 
         if light_is_visible {
-            Some((light_ray, light_pdf / self.lights.len() as f32))
+            let emission = chosen_light.material().emitted(&-light_direction);
+            Some((light_ray, light_pdf / self.lights.len() as f32, emission))
         } else {
             None
         }

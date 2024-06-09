@@ -132,9 +132,11 @@ impl Material {
 
                 let masking = todo!();
 
-                let half_vector = (*incident + *exitant).normalize();
-
                 let alpha_sq = roughness.powi(4);
+
+                // fresnel * masking * ggx / (4.0 * normal_dot_exitant)
+
+                // account for multiple scattering?
 
                 todo!()
             }

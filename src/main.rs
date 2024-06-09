@@ -11,37 +11,6 @@ use rand::{thread_rng, Rng};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use scene::RenderTask;
 
-//
-// Remaining steps:
-// - finish sample_surface/pdf for all objects (ensuring correct area sampling,
-//   and sampling likely visible subset)
-// - materials: diffuse, metal, nonmetal, glass, and mix, including properly
-//   handling transmission (and what that means for normals/backfaces/internal
-//   rays) and any special cases (eg specular) in path tracing
-// - updating scene_from_blend to work with 4.1, handle all features (and figure
-//   out exact correspondence for eg emission strength as well as materials, and
-//   print message when using substitutes), and scene file having ability to
-//   refer to same obj file with displacement/rotation, and prettify json dump
-//   and make sure will result in no io errors (eg emitters with zero strength)
-// - qmc sampling
-// - depth of field support
-// - firefly reduction issues (making sure the clamping doesnt change the look)
-// - straighten out all the intersection precision float etc problems, self
-//   intersection things, float error subtraction compounding, etc, ensure fine
-// - fix performance inconsistency with sponge/dragon etc, revisit and fix bvh
-//   and memory layout and data structure etc to fix that
-// - general optimizing and benchmarking, profiling for cpu and memory, revisit
-//   threads vs rayon, general strategy like tiling
-// - modify sample scenes and set up more, including complex ones, and organize
-//   in scenes folder, to help set up routine for comparisons and benchmarking
-//   (test with a set of blender scenes that cover all cases/features)
-// - cleaned up and commented code, proper structure, ensure neat and efficient
-//   and robust (float error, divides by zero, special cases, etc), amd things
-//   like reordering functions so that it makes sense to read (top first)
-// - readme and proper documentation with sources and picture samples, and
-//   make final git repo neat
-//
-
 /// Reads arguments, processes the scene file, renders the scene, and saves an image
 fn main() {
     let (input, output) = io::read_args().expect("Error reading arguments");

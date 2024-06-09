@@ -119,7 +119,7 @@ fn importance_sample_bsdf(
 /// Estimates the direct illumination scattered at a point by sampling all the scene's lights
 fn importance_sample_lights(hit: &Hit, prev_direction: &Vec3, scene: &Scene) -> (Vec3, Vec3, f32) {
     // Samples the scene's lights for a light point
-    let Some((light_ray, light_pdf)) = scene.sample_lights(hit.point) else {
+    let Some((light_ray, light_pdf, emission_from_light)) = scene.sample_lights(hit.point) else {
         return (Vec3::ZERO, Vec3::ZERO, 0.0);
     };
 
@@ -127,9 +127,6 @@ fn importance_sample_lights(hit: &Hit, prev_direction: &Vec3, scene: &Scene) -> 
     let hit_material = scene.object_id(hit.id).material();
     let bsdf_multiplier_at_hit =
         hit_material.bsdf_multiplier(&light_ray.direction, prev_direction, &hit.normal) / light_pdf;
-
-    // Gets the light emitted from the light hit
-    let emission_from_light = hit_material.emitted(&-light_ray.direction);
 
     // Calculates the multiple importance sampling weight for this estimate
     let bsdf_pdf: f32 = hit_material.direction_pdf(&light_ray.direction, &hit.normal);
