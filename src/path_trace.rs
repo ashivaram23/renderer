@@ -4,9 +4,10 @@ use crate::{
     objects::{Hit, Ray},
     scene::Scene,
 };
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 
-/// Estimates the incident radiance at a pixel (ray.origin) from the camera ray (ray.direction)
+/// Returns an estimate of the incident radiance at a pixel point (`ray.origin`) from the camera ray
+/// (`ray.direction`). Accounts for light paths of length up to `max_depth`.
 pub fn radiance(ray: Ray, scene: &Scene, max_depth: u32) -> Vec3 {
     // Traces the first light bounce based on the camera ray
     let Some(mut hit) = scene.trace_ray(&ray) else {
@@ -55,10 +56,12 @@ pub fn radiance(ray: Ray, scene: &Scene, max_depth: u32) -> Vec3 {
     radiance
 }
 
-/// Estimates the light scattered at a point by sampling its BSDF for a new light bounce direction
+/// Estimates the light scattered at a point (`hit.point`) by sampling its BSDF for a new light
+/// bounce direction. Returns the BSDF * cos(theta) multiplier, the emission from the next hit, the
+/// multiple importance sampling weight, the next ray, and the next hit (if it exists).
 fn importance_sample_bsdf(
     hit: &Hit,
-    prev_direction: &Vec3,
+    prev_direction: &DVec3,
     scene: &Scene,
 ) -> (Vec3, Vec3, f32, Ray, Option<Hit>) {
     // Samples the BSDF for a new direction
@@ -116,8 +119,10 @@ fn importance_sample_bsdf(
     )
 }
 
-/// Estimates the direct illumination scattered at a point by sampling all the scene's lights
-fn importance_sample_lights(hit: &Hit, prev_direction: &Vec3, scene: &Scene) -> (Vec3, Vec3, f32) {
+/// Estimates the direct illumination scattered at a point (`hit.point`) by sampling all the scene's
+/// lights. Returns the BSDF * cos(theta) multiplier, the emission from the light, and the multiple
+/// importance sampling weight.
+fn importance_sample_lights(hit: &Hit, prev_direction: &DVec3, scene: &Scene) -> (Vec3, Vec3, f32) {
     // Samples the scene's lights for a light point
     let Some((light_ray, light_pdf, emission_from_light)) = scene.sample_lights(hit.point) else {
         return (Vec3::ZERO, Vec3::ZERO, 0.0);

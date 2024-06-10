@@ -104,7 +104,7 @@ impl Display for SceneParseError {
 
 impl Error for SceneParseError {}
 
-/// Saves a rendered image to a PNG file
+/// Saves the rendered image in `film` to a PNG file.
 pub fn save_to_png(film: &Film, filename: &str) -> Result<(), Box<dyn Error>> {
     let rgb_values: Vec<u8> = film
         .pixel_data
@@ -127,7 +127,7 @@ pub fn save_to_png(film: &Film, filename: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Reads command line arguments
+/// Reads command line arguments.
 pub fn read_args() -> Option<(String, String)> {
     let matches = Command::new("renderer")
         .arg(Arg::new("input").required(true))
@@ -140,7 +140,7 @@ pub fn read_args() -> Option<(String, String)> {
     Some((input.clone(), output.clone()))
 }
 
-/// Reads the scene file at a given path, returning a RenderTask and primitive count if successful
+/// Reads the scene file at `filename`, returning a RenderTask and primitive count if successful.
 pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> {
     let Ok(scene_json) = fs::read_to_string(Path::new(filename)) else {
         return Err(SceneParseError {
@@ -190,7 +190,7 @@ pub fn read_input(filename: &str) -> Result<(RenderTask, u32), SceneParseError> 
     ))
 }
 
-/// Processes the scene file's camera parameters
+/// Processes the scene file's camera parameters.
 fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
     let Ok(camera_params) = from_value::<CameraParams>(camera_value) else {
         return Err(SceneParseError {
@@ -214,7 +214,7 @@ fn process_camera(camera_value: Value) -> Result<Camera, SceneParseError> {
     ))
 }
 
-/// Processes an object from the scene file
+/// Processes an object from the scene file.
 fn process_object(
     name: &str,
     object_value: &mut Value,
@@ -310,7 +310,7 @@ fn process_object(
     }
 }
 
-/// Processes a material from the scene file
+/// Processes a material from the scene file.
 fn process_material(
     object_name: &str,
     material_value: &mut Value,
@@ -419,7 +419,7 @@ fn process_material(
     }
 }
 
-/// Reads an OBJ file
+/// Reads an OBJ file.
 fn read_obj(filename: &str) -> Result<(Vec<Vec3>, Vec<[u32; 3]>), SceneParseError> {
     let Ok(file) = File::open(filename) else {
         return Err(SceneParseError {

@@ -1,5 +1,5 @@
 use crate::objects::{Hit, Material, Object, Ray, FLOAT_ERROR};
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 use rand::{seq::SliceRandom, thread_rng};
 
 pub struct Scene {
@@ -32,7 +32,7 @@ pub struct RenderTask {
 }
 
 impl Scene {
-    /// Creates a Scene struct from a Vec of objects and an environment color
+    /// Creates a Scene struct from a Vec of objects and an environment color.
     pub fn new(objects: Vec<Box<dyn Object>>, environment: Vec3) -> Self {
         let mut lights = Vec::new();
         for (i, object) in objects.iter().enumerate() {
@@ -48,7 +48,7 @@ impl Scene {
         }
     }
 
-    /// Finds the closest intersection of a ray in the scene
+    /// Finds the closest intersection of a ray in the scene.
     pub fn trace_ray(&self, ray: &Ray) -> Option<Hit> {
         let mut best_hit: Option<Hit> = None;
         for object in &self.objects {
@@ -62,8 +62,9 @@ impl Scene {
         best_hit
     }
 
-    /// Samples a point on the surface of the scene's lights
-    pub fn sample_lights(&self, origin_point: Vec3) -> Option<(Ray, f32, Vec3)> {
+    /// Samples a point on the surface of the scene's lights and returns a ray pointing to it along
+    /// with its probability density and emitted radiance.
+    pub fn sample_lights(&self, origin_point: DVec3) -> Option<(Ray, f32, Vec3)> {
         let chosen_light_index = self.lights.choose(&mut thread_rng())?;
         let chosen_light = &self.objects[*chosen_light_index as usize];
 
@@ -83,14 +84,14 @@ impl Scene {
         }
     }
 
-    /// Returns an object given its ID (index in the objects array)
+    /// Returns an object given its ID (index in the objects array).
     pub fn object_id(&self, id: u32) -> &dyn Object {
         &*self.objects[id as usize]
     }
 }
 
 impl Camera {
-    /// Creates a Camera struct
+    /// Creates a Camera struct.
     pub fn new(
         screen_width: u32,
         screen_height: u32,

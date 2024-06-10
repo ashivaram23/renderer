@@ -11,7 +11,7 @@ use rand::{thread_rng, Rng};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use scene::RenderTask;
 
-/// Reads arguments, processes the scene file, renders the scene, and saves an image
+/// Reads arguments, processes the scene file, renders the scene, and saves an image.
 fn main() {
     let (input, output) = io::read_args().expect("Error reading arguments");
     let (mut render_task, primitive_count) = match io::read_input(&input) {
@@ -39,7 +39,8 @@ fn main() {
     println!("Saved {}x{} image to {}", width, height, output)
 }
 
-/// Renders a scene by calculating the color of each pixel in the camera's image plane
+/// Renders the scene in `task` by calculating the color of each pixel in the camera's image plane.
+/// The result is stored in `task.camera.film`.
 fn render(task: &mut RenderTask) {
     let camera = &mut task.camera;
     let film = &mut camera.film;
@@ -65,8 +66,8 @@ fn render(task: &mut RenderTask) {
                 // Finds camera ray (going from camera origin through pixel point)
                 let film_pos = film.world_position + (u * film.world_u) + (v * film.world_v);
                 let camera_ray = Ray::new(
-                    camera.world_origin,
-                    (film_pos - camera.world_origin).normalize(),
+                    camera.world_origin.as_dvec3(),
+                    (film_pos.as_dvec3() - camera.world_origin.as_dvec3()).normalize(),
                 );
 
                 // Adds estimated radiance to the pixel color, clamped to reduce fireflies

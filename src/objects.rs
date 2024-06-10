@@ -1,41 +1,41 @@
-use std::f32::consts::PI;
+use std::f64::consts::PI;
 
-use glam::{Quat, Vec3};
+use glam::{DQuat, DVec3, Vec3};
 use rand::{thread_rng, Rng};
 use rayon::{
     iter::{IndexedParallelIterator, IntoParallelIterator},
     slice::ParallelSliceMut,
 };
 
-pub const FLOAT_ERROR: f32 = 1e-6;
+pub const FLOAT_ERROR: f64 = 1e-7;
 const BVH_LEAF_MAX: usize = 4;
 const BVH_NUM_SPLITS: usize = 40;
 
 pub trait Object: Sync {
-    /// Returns the closest intersection of this object with a ray
+    /// Returns the closest intersection of this object with a ray.
     fn intersect(&self, ray: &Ray) -> Option<Hit>;
 
-    /// Returns this object's material
+    /// Returns this object's material.
     fn material(&self) -> &Material;
 
-    /// Samples a point on the surface of this object, for light sampling
-    fn sample_surface(&self, origin_point: Vec3) -> (Hit, f32);
+    /// Samples a point on the surface of this object and returns its probability density.
+    fn sample_surface(&self, origin_point: DVec3) -> (Hit, f32);
 
-    /// Returns the probability density of sampling a surface point
-    fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32;
+    /// Returns the probability density of sampling a given surface point (`triangle_point`).
+    fn surface_pdf(&self, origin_point: DVec3, triangle_point: DVec3, triangle_id: u32) -> f32;
 }
 
 pub struct Ray {
-    pub origin: Vec3,
-    pub direction: Vec3,
+    pub origin: DVec3,
+    pub direction: DVec3,
 }
 
 pub struct Hit {
     pub id: u32,
     pub triangle_id: u32,
-    pub point: Vec3,
-    pub distance: f32,
-    pub normal: Vec3,
+    pub point: DVec3,
+    pub distance: f64,
+    pub normal: DVec3,
 }
 
 #[derive(Clone, Copy)]
@@ -76,36 +76,36 @@ pub struct BoundingBox {
 }
 
 impl Ray {
-    /// Creates a Ray struct from an origin and normalized direction
-    pub fn new(origin: Vec3, direction: Vec3) -> Self {
+    /// Creates a Ray struct from an origin and normalized direction.
+    pub fn new(origin: DVec3, direction: DVec3) -> Self {
         Ray { origin, direction }
     }
 
-    /// Finds the point at a given distance from the origin along the ray direction
-    pub fn at(&self, distance: f32) -> Vec3 {
+    /// Finds the point at a given distance from the origin along the ray direction.
+    pub fn at(&self, distance: f64) -> DVec3 {
         self.origin + distance * self.direction
     }
 }
 
 impl Bounds {
-    /// Adds other bounds to these bounds (in-place union)
+    /// Adds other bounds to these bounds (in-place union).
     fn add_bounds(&mut self, other: &Bounds) {
         self.min = self.min.min(other.min);
         self.max = self.max.max(other.max);
     }
 
-    /// Expands these bounds by a certain amount on all sides
+    /// Expands these bounds by a certain amount on all sides.
     fn expand(&mut self, addition: Vec3) {
         self.min -= addition;
         self.max += addition;
     }
 
-    /// Returns the size of the box contained by these bounds
+    /// Returns the size of the box contained by these bounds.
     fn size(&self) -> Vec3 {
         self.max - self.min
     }
 
-    /// Returns the union of these bounds with other bounds
+    /// Returns the union of these bounds with other bounds.
     fn union(&self, other: &Bounds) -> Self {
         Bounds {
             min: self.min.min(other.min),
@@ -115,12 +115,15 @@ impl Bounds {
 }
 
 impl Material {
-    /// Returns BSDF * cos(theta) at a point (incident points towards incoming light)
-    pub fn bsdf_multiplier(&self, incident: &Vec3, exitant: &Vec3, normal: &Vec3) -> Vec3 {
+    /// Returns BSDF * cos(theta) at a point. `incident` points towards the source of incoming
+    /// light and `exitant` points where the light travels.
+    pub fn bsdf_multiplier(&self, incident: &DVec3, exitant: &DVec3, normal: &DVec3) -> Vec3 {
         match self {
-            Material::Diffuse(color) => *color * normal.dot(*incident) / PI,
+            Material::Diffuse(color) => (color.as_dvec3() * normal.dot(*incident) / PI).as_vec3(),
             Material::Emitter(_, _) => Vec3::ZERO,
             Material::Metal(color, roughness) => {
+                let color = color.as_dvec3();
+
                 let normal_dot_incident = normal.dot(*incident);
                 let normal_dot_exitant = normal.dot(*exitant);
 
@@ -128,7 +131,7 @@ impl Material {
                 let half_dot_normal = half.dot(*normal);
                 let half_dot_incident = half.dot(*incident);
 
-                let fresnel = *color + (1.0 - *color) * (1.0 - half_dot_incident).powi(5);
+                let fresnel = color + (1.0 - color) * (1.0 - half_dot_incident).powi(5);
 
                 let masking = todo!();
 
@@ -146,25 +149,25 @@ impl Material {
         }
     }
 
-    /// Returns the radiance emitted by this material in a direction
-    pub fn emitted(&self, _exitant: &Vec3) -> Vec3 {
+    /// Returns the radiance emitted by this material in a given direction.
+    pub fn emitted(&self, _exitant: &DVec3) -> Vec3 {
         match self {
             Material::Emitter(color, strength) => *color * *strength,
             _ => Vec3::ZERO,
         }
     }
 
-    /// Samples a new direction that points towards incoming light
-    pub fn sample_direction(&self, normal: &Vec3) -> (Vec3, f32) {
+    /// Samples a new direction from the BSDF and returns its probability density.
+    pub fn sample_direction(&self, normal: &DVec3) -> (DVec3, f32) {
         match self {
             Material::Diffuse(_) | Material::Emitter(_, _) => {
-                let r_sq = thread_rng().gen::<f32>();
+                let r_sq = thread_rng().gen::<f64>();
                 let r = r_sq.sqrt();
-                let theta = 2.0 * PI * thread_rng().gen::<f32>();
+                let theta = 2.0 * PI * thread_rng().gen::<f64>();
 
-                let direction = Vec3::new(r * theta.cos(), (1.0 - r_sq).sqrt(), r * theta.sin());
-                let rotated = Quat::from_rotation_arc(Vec3::Y, *normal).mul_vec3(direction);
-                (rotated, direction.dot(Vec3::Y) / PI)
+                let direction = DVec3::new(r * theta.cos(), (1.0 - r_sq).sqrt(), r * theta.sin());
+                let rotated = DQuat::from_rotation_arc(DVec3::Y, *normal).mul_vec3(direction);
+                (rotated, (direction.dot(DVec3::Y) / PI) as f32)
             }
             Material::Metal(_, _) => todo!(),
             Material::Nonmetal(_, _, _) => todo!(),
@@ -173,10 +176,10 @@ impl Material {
         }
     }
 
-    /// Returns the probability density of sampling a given direction
-    pub fn direction_pdf(&self, direction: &Vec3, normal: &Vec3) -> f32 {
+    /// Returns the probability density of sampling a given direction.
+    pub fn direction_pdf(&self, direction: &DVec3, normal: &DVec3) -> f32 {
         match self {
-            Material::Diffuse(_) | Material::Emitter(_, _) => direction.dot(*normal) / PI,
+            Material::Diffuse(_) | Material::Emitter(_, _) => (direction.dot(*normal) / PI) as f32,
             Material::Metal(_, _) => todo!(),
             Material::Nonmetal(_, _, _) => todo!(),
             Material::Glass(_, _, _) => todo!(),
@@ -186,7 +189,7 @@ impl Material {
 }
 
 impl Sphere {
-    /// Creates a Sphere struct
+    /// Creates a Sphere struct.
     pub fn new(id: usize, center: Vec3, radius: f32, material: Material) -> Self {
         Sphere {
             id: id as u32,
@@ -199,8 +202,8 @@ impl Sphere {
 
 impl Object for Sphere {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        let radius_sq = self.radius * self.radius;
-        let origin_to_center = self.center - ray.origin;
+        let radius_sq = self.radius as f64 * self.radius as f64;
+        let origin_to_center = self.center.as_dvec3() - ray.origin;
         let origin_to_center_sq = origin_to_center.length_squared();
 
         let projection_on_ray = origin_to_center.dot(ray.direction);
@@ -220,7 +223,7 @@ impl Object for Sphere {
         }
 
         let hit_location = ray.at(hit_distance - FLOAT_ERROR);
-        let mut normal = (hit_location - self.center).normalize();
+        let mut normal = (hit_location - self.center.as_dvec3()).normalize();
         if ray.direction.dot(normal) > 0.0 {
             normal *= -1.0;
         }
@@ -238,18 +241,18 @@ impl Object for Sphere {
         &self.material
     }
 
-    fn sample_surface(&self, origin_point: Vec3) -> (Hit, f32) {
+    fn sample_surface(&self, origin_point: DVec3) -> (Hit, f32) {
         // later, try to only sample smaller potentially visible part, and update surface_pdf too
         todo!()
     }
 
-    fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32 {
+    fn surface_pdf(&self, origin_point: DVec3, triangle_point: DVec3, triangle_id: u32) -> f32 {
         todo!()
     }
 }
 
 impl Mesh {
-    /// Creates a Mesh struct
+    /// Creates a Mesh struct.
     pub fn new(
         id: usize,
         vertices: Vec<Vec3>,
@@ -282,17 +285,17 @@ impl Mesh {
 
 impl Object for Mesh {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        let mut best_distance_normal: Option<(f32, Vec3)> = None;
+        let mut best_distance_normal: Option<(f64, DVec3)> = None;
         let mut best_triangle_id = 0;
         let ray_direction_recip = ray.direction.recip();
 
         let mut i = 0;
         while i < self.bvh.len() {
-            let near = (self.bvh[i].bounds.min - ray.origin) * ray_direction_recip;
-            let far = (self.bvh[i].bounds.max - ray.origin) * ray_direction_recip;
+            let near = (self.bvh[i].bounds.min.as_dvec3() - ray.origin) * ray_direction_recip;
+            let far = (self.bvh[i].bounds.max.as_dvec3() - ray.origin) * ray_direction_recip;
 
             let min_distance = near.min(far).max_element().max(FLOAT_ERROR);
-            let max_distance = far.max(near).min_element().min(f32::INFINITY);
+            let max_distance = far.max(near).min_element().min(f64::INFINITY);
             if min_distance >= max_distance {
                 i += (self.bvh[i].descendant_count + 1) as usize;
                 continue;
@@ -306,9 +309,9 @@ impl Object for Mesh {
             let triangles =
                 &self.indices[self.bvh[i].start_index as usize..self.bvh[i].end_index as usize];
             for (triangle_id, triangle) in triangles.iter().enumerate() {
-                let p1 = self.vertices[triangle[0] as usize];
-                let p2 = self.vertices[triangle[1] as usize];
-                let p3 = self.vertices[triangle[2] as usize];
+                let p1 = self.vertices[triangle[0] as usize].as_dvec3();
+                let p2 = self.vertices[triangle[1] as usize].as_dvec3();
+                let p3 = self.vertices[triangle[2] as usize].as_dvec3();
 
                 let Some((distance, normal)) = intersect_triangle(ray, p1, p2, p3) else {
                     continue;
@@ -341,17 +344,17 @@ impl Object for Mesh {
         &self.material
     }
 
-    fn sample_surface(&self, point: Vec3) -> (Hit, f32) {
+    fn sample_surface(&self, point: DVec3) -> (Hit, f32) {
         // todo: later consider trying to sample smaller subset
         let chosen_triangle_id = thread_rng().gen_range(0..self.indices.len());
 
-        let u = 1.0 - thread_rng().gen::<f32>().sqrt();
-        let v = thread_rng().gen::<f32>() * (1.0 - u);
+        let u = 1.0 - thread_rng().gen::<f64>().sqrt();
+        let v = thread_rng().gen::<f64>() * (1.0 - u);
 
         let triangle = self.indices[chosen_triangle_id];
-        let p1 = self.vertices[triangle[0] as usize];
-        let p2 = self.vertices[triangle[1] as usize];
-        let p3 = self.vertices[triangle[2] as usize];
+        let p1 = self.vertices[triangle[0] as usize].as_dvec3();
+        let p2 = self.vertices[triangle[1] as usize].as_dvec3();
+        let p3 = self.vertices[triangle[2] as usize].as_dvec3();
 
         let triangle_point = u * p1 + v * p2 + (1.0 - u - v) * p3;
         let side2_cross_side1 = (p3 - p1).cross(p2 - p1);
@@ -374,15 +377,15 @@ impl Object for Mesh {
                 distance,
                 normal,
             },
-            area_to_solid_angle * surface_pdf / self.indices.len() as f32,
+            (area_to_solid_angle * surface_pdf / self.indices.len() as f64) as f32,
         )
     }
 
-    fn surface_pdf(&self, origin_point: Vec3, triangle_point: Vec3, triangle_id: u32) -> f32 {
+    fn surface_pdf(&self, origin_point: DVec3, triangle_point: DVec3, triangle_id: u32) -> f32 {
         let triangle = self.indices[triangle_id as usize];
-        let p1 = self.vertices[triangle[0] as usize];
-        let p2 = self.vertices[triangle[1] as usize];
-        let p3 = self.vertices[triangle[2] as usize];
+        let p1 = self.vertices[triangle[0] as usize].as_dvec3();
+        let p2 = self.vertices[triangle[1] as usize].as_dvec3();
+        let p3 = self.vertices[triangle[2] as usize].as_dvec3();
 
         let side2_cross_side1 = (p3 - p1).cross(p2 - p1);
         let mut normal = side2_cross_side1.normalize();
@@ -395,12 +398,12 @@ impl Object for Mesh {
         let area_to_solid_angle =
             distance.powi(2) / normal.dot((origin_point - triangle_point).normalize());
 
-        area_to_solid_angle * surface_pdf / self.indices.len() as f32
+        (area_to_solid_angle * surface_pdf / self.indices.len() as f64) as f32
     }
 }
 
-/// Finds the intersection of a ray and triangle
-fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, Vec3)> {
+/// Finds the intersection of a ray and triangle, returning the distance and normal vector.
+fn intersect_triangle(ray: &Ray, p1: DVec3, p2: DVec3, p3: DVec3) -> Option<(f64, DVec3)> {
     let side1 = p2 - p1;
     let side2 = p3 - p1;
 
@@ -429,14 +432,14 @@ fn intersect_triangle(ray: &Ray, p1: Vec3, p2: Vec3, p3: Vec3) -> Option<(f32, V
     }
 }
 
-/// Constructs a bounding volume hierarchy for triangles in a mesh
+/// Constructs a bounding volume hierarchy for triangles in a mesh.
 fn make_bvh(
     indices_and_bounds: &mut [([u32; 3], Bounds)],
     mut full_bounds: Bounds,
     start: usize,
     end: usize,
 ) -> Vec<BoundingBox> {
-    full_bounds.expand(Vec3::splat(FLOAT_ERROR));
+    full_bounds.expand(Vec3::splat(1e-6));
     let mut bvh_tree = vec![BoundingBox {
         start_index: start as u32,
         end_index: end as u32,
