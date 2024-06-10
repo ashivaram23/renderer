@@ -3,7 +3,7 @@
 This program renders 3D scenes with global illumination using Monte Carlo path tracing.
 
 ![Stanford dragon](dragon.png)  
-*Scene at `scenes/dragon.json`. 871,416 triangles rendered at 32 samples per pixel in 25.81 s on 2017 MacBook Pro with i7-7700HQ*
+*Scene at `scenes/dragon/dragon.json` with 871,416 triangles. Rendered with 32 samples per pixel at 1080x720 resolution in 8.15 s on an Intel i7-7700HQ CPU.*
 
 ## Build
 
@@ -22,7 +22,7 @@ Describe a scene with a JSON file in the following format. Positions are based o
 ```json
 {
     "camera": {
-        "film_dimensions": [1920, 1080], 
+        "film_dimensions": [1080, 720], 
         "origin": [0, 0.7, -3],
         "look_at": [0, 0, 2.701],
         "up": [0, 1, 0],
@@ -38,25 +38,25 @@ Describe a scene with a JSON file in the following format. Positions are based o
     "objects": {
         "floor": {
             "type": "mesh",
-            "file": "scenes/objects/floor.obj",
+            "file": "scenes/dragon/objects/floor.obj",
             "material": {
                 "type": "diffuse",
-                "reflectance": [0.05, 0.39, 0.8]
+                "color": [0.05, 0.39, 0.8]
             }
         },
         "dragon": {
             "type": "mesh",
-            "file": "scenes/objects/dragon.obj",
+            "file": "scenes/dragon/objects/dragon.obj",
             "material": {
                 "type": "diffuse",
-                "reflectance": [0.8, 0.75, 0.1]
+                "color": [0.8, 0.75, 0.1]
             }
         }
     }
 }
 ```
 
-This example renders a 1920x1080px image from a camera positioned at (0, 0.7, -3) and facing towards (0, 0, 2.701) with a field of view of 45 degrees. The sky color is light blue (RGB 0.4, 0.6, 0.9) and the renderer calculates 32 samples per pixel. There are two objects: a blue floor plane mesh from floor.obj and a yellow dragon mesh from dragon.obj.
+This example renders a 1080x720px image from a camera positioned at (0, 0.7, -3) and facing towards (0, 0, 2.701) with a field of view of 45 degrees. The sky color is light blue (RGB 0.4, 0.6, 0.9) and the renderer calculates 32 samples per pixel. There are two objects: a blue floor plane mesh from floor.obj and a yellow dragon mesh from dragon.obj.
 
 Each OBJ file should include one object made of triangles only, and will be read with the +z axis pointing forward and the +y axis pointing up. (OBJ files use right-handed coordinates, which will automatically be converted by the renderer.)
 
@@ -66,11 +66,11 @@ See the scenes folder for more examples.
 
 ## Example renders
 
-![Menger sponge](spongeoutside.png)  
-*`scenes/spongeoutside.json`, 64 samples per pixel*
+![Cornell box](cornell.png)  
+*`scenes/cornell/cornell.json`, 32 samples per pixel*
 
 ![Stanford bunny, Utah teapot, and Suzanne monkey](bunnyetc.png)  
-*`scenes/bunnyetc.json`, 64 samples per pixel*
+*`scenes/bunnyetc/bunnyetc.json`, 32 samples per pixel*
 
 <!-- Update this with images and details, render times, comparisons, etc -->
 

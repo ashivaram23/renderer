@@ -1,6 +1,6 @@
 {
     "camera": {
-        "film_dimensions": [1920, 1080], 
+        "film_dimensions": [1080, 720], 
         "origin": [0, 0.7, -3],
         "look_at": [0, 0, 2.701],
         "up": [0, 1, 0],
@@ -8,7 +8,7 @@
     },
     "settings": {
         "environment": [0.4, 0.6, 0.9],
-        "samples_per_pixel": 16,
+        "samples_per_pixel": 32,
         "max_ray_depth": 8
     },
     "objects": {

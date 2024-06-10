@@ -1,0 +1,41 @@
+{
+    "camera": {
+        "film_dimensions": [900, 600],
+        "origin": [0.0, 1.0, -4.0],
+        "look_at": [0.0, 0.8263517866872512, -3.015192305753189],
+        "up": [0.0, 0.9848076942468111, 0.17364821331274882],
+        "field_of_view": 53.1301017798049
+    },
+    "settings": {
+        "environment": [0.0, 0.0, 0.0],
+        "samples_per_pixel": 32,
+        "max_ray_depth": 2
+    },
+    "objects": {
+        "Cube": {
+            "type": "mesh",
+            "file": "/Users/sparkley/Desktop/renderer/scenes/emissiontest2/objects/Cube.obj",
+            "material": {
+                "type": "diffuse",
+                "color": [0.0, 1.0, 0.0]
+            }
+        },
+        "Floor": {
+            "type": "mesh",
+            "file": "/Users/sparkley/Desktop/renderer/scenes/emissiontest2/objects/Floor.obj",
+            "material": {
+                "type": "diffuse",
+                "color": [1.0, 0.0, 0.0]
+            }
+        },
+        "Light": {
+            "type": "mesh",
+            "file": "/Users/sparkley/Desktop/renderer/scenes/emissiontest2/objects/Light.obj",
+            "material": {
+                "type": "emitter",
+                "color": [1.0, 1.0, 1.0],
+                "strength": 10
+            }
+        }
+    }
+}

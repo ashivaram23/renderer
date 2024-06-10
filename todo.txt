@@ -1,0 +1,37 @@
+Remaining steps:
+- revisit double precision in intermediate calculations, find good balance of
+  where to use it for the precision gain without too much time increase and type
+  conversions, ie find minimal use of f64 (ideally as local as possible to key 
+  functions and structs like hit) that fixes emission and dragon cases with 
+  minimal extra time
+- finish sample_surface/pdf for all objects (ensuring correct area sampling,
+  and sampling likely visible subset, eg do something to sample only close
+  triangles in light mesh, for example if had box light wouldnt want to pick the 
+  vertex on top regardless of switching normals)
+- materials: diffuse, metal, nonmetal, glass, and mix, including properly
+  handling transmission (and what that means for normals/backfaces/internal
+  rays) and any special cases (eg specular) in path tracing
+- updating scene_from_blend to work with 4.1, handle all features (and figure
+  out correspondence with materials, and print message when using substitutes), 
+  and scene file having ability to refer to same obj file with displacement/
+  rotation, and prettify json dump, and make sure will result in no io errors 
+  (eg emitters with zero strength)
+- scene object bvh, if profitable, and anything to make intersect functions and
+  memory access faster
+- qmc sampling
+- depth of field support
+- firefly reduction issues (making sure the clamping doesnt change the look)
+- straighten out all the intersection precision float etc problems, self
+  intersection things, float error subtraction compounding, etc, ensure fine
+- fix performance inconsistency with sponge/dragon etc, revisit and fix bvh
+  and memory layout and data structure etc to fix that
+- general optimizing and benchmarking, profiling for cpu and memory (and see how
+  can make faster to get back to reference times, including since using f64 made
+  it higher)
+- modify sample scenes and set up more, including complex ones, and organize
+  in scenes folder, to help set up routine for comparisons and benchmarking
+  (test with a set of blender scenes that cover all cases/features)
+- cleaned up and commented code, proper structure, ensure neat and efficient
+  and robust (float error, divides by zero, special cases, etc)
+- readme and proper documentation with sources and picture samples, and also 
+  timing and noise results and comparisons, and make final git repo neat

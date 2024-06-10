@@ -1,0 +1,66 @@
+{
+    "camera": {
+        "film_dimensions": [1080, 720],
+        "origin": [0.0, 1.0, -4.0],
+        "look_at": [0.0, 0.8263517866872512, -3.015192305753189],
+        "up": [0.0, 0.9848076942468111, 0.17364821331274882],
+        "field_of_view": 53.1301017798049
+    },
+    "settings": {
+        "environment": [0,0,0],
+        "samples_per_pixel": 64,
+        "max_ray_depth": 12
+    },
+    "objects": {
+        "Cube": {
+            "type": "mesh",
+            "file": "scenes/emissiontest/objects/Cube.obj",
+            "material": {
+                "type": "diffuse",
+                "color": [0.0, 1.0, 0.0]
+            }
+        },
+        "Plane": {
+            "type": "mesh",
+            "file": "scenes/emissiontest/objects/Plane.obj",
+            "material": {
+                "type": "diffuse",
+                "color": [1.0, 0.0, 0.0]
+            }
+        },
+        "Plane.001": {
+            "type": "mesh",
+            "file": "scenes/emissiontest/objects/Plane.001.obj",
+            "material": {
+                "type": "emitter",
+                "color": [1,1,1],
+                "strength": 10
+            }
+        },
+        "Plane.002": {
+            "type": "mesh",
+            "file": "scenes/emissiontest/objects/Plane.002.obj",
+            "material": {
+                "type": "diffuse",
+                "color": [0.5, 0.5, 0.5]
+            }
+        },
+        "Plane.003": {
+            "type": "mesh",
+            "file": "scenes/emissiontest/objects/Plane.003.obj",
+            "material": {
+                "type": "diffuse",
+                "color": [0.5, 0.5, 0.5]
+            }
+        },
+        "Plane.004": {
+            "type": "mesh",
+            "file": "scenes/emissiontest/objects/Plane.004.obj",
+            "material": {
+                "type": "emitter",
+                "color": [1,1,1],
+                "strength": 10
+            }
+        }
+    }
+}

@@ -17,6 +17,7 @@ import bpy
 import math
 import json
 import os
+import re
 
 
 def xzy_to_xyz(values):
@@ -87,16 +88,16 @@ for mesh in meshes:
     bpy.ops.wm.obj_export(filepath=f"objects/{mesh.name}.obj", **export_args)
     mesh.select_set(False)
 
-    reflectance = [0.5] * 3
+    color = [0.5] * 3
     materials = mesh.data.materials.values()
     if len(materials) > 0 and "Diffuse BSDF" in materials[0].node_tree.nodes:
         diffuse_node = materials[0].node_tree.nodes["Diffuse BSDF"]
-        reflectance = list(diffuse_node.inputs[0].default_value[:3])
+        color = list(diffuse_node.inputs[0].default_value[:3])
 
     scene_dict["objects"][mesh.name] = {
         "type": "mesh",
         "file": f"{os.getcwd()}/objects/{mesh.name}.obj",
-        "material": {"type": "diffuse", "reflectance": reflectance}
+        "material": {"type": "diffuse", "color": color}
         }
 
 blend_name = bpy.path.basename(bpy.data.filepath)
@@ -108,7 +109,14 @@ for i in range(1, 100):
     else:
         break
 
+number_pattern = "-?[0-9]+(?:\.[0-9]+)?"
+double_pattern = "\[\n *({0}),\n *({0})\n *\]".format(number_pattern)
+triple_pattern = "\[\n *({0}),\n *({0}),\n *({0})\n *\]".format(number_pattern)
+scene_string = json.dumps(scene_dict, indent=4)
+scene_string = re.sub(double_pattern, r"[\1, \2]", scene_string)
+scene_string = re.sub(triple_pattern, r"[\1, \2, \3]", scene_string)
+
 with open(output_filename, "w") as file:
-    json.dump(scene_dict, file)
+    file.write(scene_string)
 
 print(f"Created scene file at {output_filename}")

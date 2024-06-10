@@ -1,80 +1,80 @@
 {
     "camera": {
-        "film_dimensions": [1080, 1080], 
-        "origin": [-2.7799999713897705, 2.7300000190734863, -8.0], 
-        "look_at": [-2.7799999713897705, 2.7300000190734863, -7.000000034228542], 
-        "up": [0.0, 0.9999999657714582, 0.0], 
+        "film_dimensions": [1080, 1080],
+        "origin": [-2.7799999713897705, 2.7300000190734863, -8.0],
+        "look_at": [-2.7799999713897705, 2.7300000190734863, -7.000000034228542],
+        "up": [0.0, 0.9999999657714582, 0.0],
         "field_of_view": 39.30764988096417
-    }, 
+    },
     "settings": {
-        "environment": [0.0, 0.0, 0.0], 
-        "samples_per_pixel": 16, 
+        "environment": [0.0, 0.0, 0.0],
+        "samples_per_pixel": 32,
         "max_ray_depth": 8
-    }, 
+    },
     "objects": {
         "Back": {
-            "type": "mesh", 
-            "file": "scenes/cornell/objects/Back.obj", 
+            "type": "mesh",
+            "file": "scenes/cornell/objects/Back.obj",
             "material": {
-                "type": "diffuse", 
-                "color": [0.5, 0.5, 0.5]
+                "type": "diffuse",
+                "color": [0.699999988079071, 0.699999988079071, 0.699999988079071]
             }
-        }, 
+        },
         "Ceiling": {
-            "type": "mesh", 
-            "file": "scenes/cornell/objects/Ceiling.obj", 
+            "type": "mesh",
+            "file": "scenes/cornell/objects/Ceiling.obj",
             "material": {
-                "type": "diffuse", 
-                "color": [0.5, 0.5, 0.5]
+                "type": "diffuse",
+                "color": [0.699999988079071, 0.699999988079071, 0.699999988079071]
             }
-        }, 
+        },
         "Cube": {
-            "type": "mesh", 
-            "file": "scenes/cornell/objects/Cube.obj", 
+            "type": "mesh",
+            "file": "scenes/cornell/objects/Cube.obj",
             "material": {
-                "type": "diffuse", 
-                "color": [0.5, 0.5, 0.5]
+                "type": "diffuse",
+                "color": [0.699999988079071, 0.699999988079071, 0.699999988079071]
             }
-        }, 
+        },
         "CubeSmall": {
-            "type": "mesh", 
-            "file": "scenes/cornell/objects/CubeSmall.obj", 
+            "type": "mesh",
+            "file": "scenes/cornell/objects/CubeSmall.obj",
             "material": {
-                "type": "diffuse", 
-                "color": [0.5, 0.5, 0.5]
+                "type": "diffuse",
+                "color": [0.699999988079071, 0.699999988079071, 0.699999988079071]
             }
-        }, 
+        },
         "Floor": {
-            "type": "mesh", 
-            "file": "scenes/cornell/objects/Floor.obj", 
+            "type": "mesh",
+            "file": "scenes/cornell/objects/Floor.obj",
             "material": {
-                "type": "diffuse", 
-                "color": [0.5, 0.5, 0.5]
+                "type": "diffuse",
+                "color": [0.699999988079071, 0.699999988079071, 0.699999988079071]
             }
-        }, 
+        },
         "Left": {
-            "type": "mesh", 
-            "file": "scenes/cornell/objects/Left.obj", 
+            "type": "mesh",
+            "file": "scenes/cornell/objects/Left.obj",
             "material": {
-                "type": "diffuse", 
-                "color": [0.5, 0.0, 0.0]
+                "type": "diffuse",
+                "color": [0.699999988079071, 0.0, 0.0]
             }
-        }, 
+        },
         "Light": {
-            "type": "mesh", 
-            "file": "scenes/cornell/objects/Light.obj", 
+            "type": "mesh",
+            "file": "scenes/cornell/objects/Light.obj",
             "material": {
-                "type": "emitter", 
-                "color": [1.0, 1.0, 1.0], 
+                "type": "emitter",
+                "color": [1.0, 1.0, 1.0],
                 "strength": 30
             }
-        }, 
+        },
         "Right": {
-            "type": "mesh", 
-            "file": "scenes/cornell/objects/Right.obj", 
+            "type": "mesh",
+            "file": "scenes/cornell/objects/Right.obj",
             "material": {
-                "type": "diffuse", 
-                "color": [0.0, 0.5, 0.0]
+                "type": "diffuse",
+                "color": [0.0, 0.699999988079071, 0.0]
             }
         }
     }
